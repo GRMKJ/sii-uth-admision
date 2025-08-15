@@ -1,101 +1,132 @@
 import 'package:flutter/material.dart';
-import 'theme.dart';
+import 'package:go_router/go_router.dart';
+import 'package:siiadmision/admin_aspirantes.dart';
+import 'package:siiadmision/admision_documents.dart';
+import 'package:siiadmision/admision_status_documents.dart';
+import 'package:siiadmision/admision_upload_documents.dart';
+import 'package:siiadmision/login_screen.dart';
+import 'package:siiadmision/admision_screen.dart';
+import 'package:siiadmision/admision_payment_screen.dart';
+import 'package:siiadmision/admision_payment_status.dart';
+import 'package:siiadmision/theme.dart';
+import 'package:siiadmision/side_navigation.dart';
+import 'package:siiadmision/alumno_inicio.dart';
+import 'package:siiadmision/public_layout.dart';
+import 'package:siiadmision/admin_inicio.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+
 void main() {
+  setUrlStrategy(PathUrlStrategy());
   runApp(const MyApp());
 }
+
+final GoRouter _router = GoRouter(
+  initialLocation: '/',
+  routes: [
+    ShellRoute(
+      builder: (context, state, child) => PublicLayout(child: child),
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const LoginScreen(),
+        ),
+        GoRoute(
+          path: '/admision',
+          builder: (context, state) => const AdmissionScreen(),
+        ),
+        GoRoute(
+          path: '/admision/pagoexamen',
+          builder: (context, state) => const PaymentScreen(),
+        ),
+        GoRoute(
+          path: '/admision/pagoexamen/status',
+          builder: (context, state) => const PaymentStatusScreen(),
+        ),
+        GoRoute(
+          path: '/admision/documentos',
+          builder: (context, state) => const DocumentosScreen(),
+        ),
+        GoRoute(
+          path: '/admision/documentos/subida',
+          builder: (context, state) => const UploadDocumentsScreen(),
+        ),
+        GoRoute(
+          path: '/admision/documentos/estado',
+          builder: (context, state) => const DocumentosStatusScreen(),
+        ),
+      ],
+    ),
+
+    // Rutas privadas fuera del shell público
+    GoRoute(
+      path: '/alumno/inicio',
+      builder: (context, state) => const DashboardAlumnoScreen(),
+    ),
+    GoRoute(
+      path: '/admin/inicio',
+      builder: (context, state) => const DashboardAdminScreen(),
+    ),
+    GoRoute(
+      path: '/admin/aspirantes',
+      builder: (context, state) => const AspirantesAdminScreen(),
+    ),
+  ],
+);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     final materialTheme = MaterialTheme(ThemeData().textTheme);
 
-    return MaterialApp(
-      
-      title: 'SII - Inicio',
+    return MaterialApp.router(
+      title: 'SII - UTH Admisión',
       theme: materialTheme.light(),
       darkTheme: materialTheme.dark(),
-      themeMode: ThemeMode.system, 
-      home: const MyHomePage(title: 'Sistema de Información Institucional - Inicio'),
+      themeMode: ThemeMode.system,
+      routerConfig: _router,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-  
-  final String title;
+class ShellLayout extends StatelessWidget {
+  final Widget child;
+  final int selectedIndex;
 
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  const ShellLayout({
+    super.key,
+    required this.child,
+    required this.selectedIndex,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+      body: Row(
+        children: [
+          SideNavigation(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (index) {
+              switch (index) {
+                case 0:
+                  context.go('/');
+                  break;
+                case 1:
+                  context.go('/admision');
+                  break;
+                case 2:
+                  context.go('/uth');
+                  break;
+                case 3:
+                  context.go('/settings');
+                  break;
+              }
+            },
+          ),
+          Expanded(child: child),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
