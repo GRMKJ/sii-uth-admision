@@ -1,4 +1,4 @@
-
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class Session {
   static final Session _instance = Session._internal();
@@ -13,4 +13,18 @@ class Session {
 
   void loginAs(String r) => role = r;
   void logout() => role = null;
+
+  Future<void> load() async {
+    final storage = FlutterSecureStorage();
+    final role = await storage.read(key: "role");
+    if (role == "administrativo") {
+      this.role = "admin";
+    } else if (role == "alumno") {
+      this.role = "alumno";
+    } else if (role == "aspirante") {
+      this.role = "aspirante";
+    } else {
+      this.role = null;
+    }
+  }
 }

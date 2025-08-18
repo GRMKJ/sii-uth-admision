@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/session.dart';
-import 'package:siiadmision/config/aspirante_progress.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,6 +14,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  final storage = FlutterSecureStorage();
 
   @override
   Widget build(BuildContext context) {
@@ -168,27 +171,80 @@ class _LoginScreenState extends State<LoginScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: colors.primary,
               foregroundColor: colors.onPrimary,
-              padding: const EdgeInsets.symmetric(
-                vertical: 14,
-                horizontal: 20,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
             ),
-            onPressed: () {
-              final user = _usernameController.text;
-              final pass = _passwordController.text;
+            onPressed: () async {
+              final identity = _usernameController.text.trim();
+              final password = _passwordController.text;
 
-              if (user == 'ASP123456' && pass == 'aspirante') {
-                Session().loginAs('aspirante');
-                context.go('/admision');
-              } else if (user == 'ALU2025001' && pass == 'alumno') {
-                Session().loginAs('alumno');
-                context.go('/alumno/inicio');
-              } else if (user == 'ADM001' && pass == 'admin') {
-                Session().loginAs('admin');
-                context.go('/admin/inicio');
-              } else {
+              if (identity.isEmpty || password.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Usuario o contraseña incorrectos')),
+                  const SnackBar(
+                    content: Text("Usuario y contraseña requeridos"),
+                  ),
+                );
+                return;
+              }
+
+              try {
+                final response = await ApiClient.postJson(
+                  "/auth/login",
+                  body: {"identity": identity, "password": password},
+                );
+
+                if (response["success"] != true) {
+                  throw Exception(response["message"] ?? "Error desconocido");
+                }
+
+                final data = response["data"] as Map<String, dynamic>;
+                final token = data["token"] as String;
+                final user = data["user"] as Map<String, dynamic>;
+                final role = user["role"] as String;
+
+                debugPrint("✅ Token recibido: $token");
+                debugPrint("✅ Rol detectado: $role");
+
+                await storage.write(key: "auth_token", value: token);
+                await storage.write(key: "role", value: role);
+
+                await Session().load();
+
+                // 🔹 Navegar según rol
+                switch (role) {
+                  case "aspirante":
+                    debugPrint("📌 Rol aspirante: buscando progreso...");
+                    final stepResponse = await ApiClient.getJson(
+                      "/aspirantes/progress",
+                      token: token,
+                    );
+
+                    if (stepResponse["success"] == true) {
+                      final step = stepResponse["step"] as int;
+                      debugPrint("➡️ Progreso detectado: step $step");
+                      // Usa tu función para mandar al paso correcto
+                      handleLogin(context, step);
+                    } else {
+                      throw Exception("No se pudo obtener progreso");
+                    }
+                    break;
+
+                  case "alumno":
+                    debugPrint("➡️ Navegando a /alumno/inicio");
+                    context.go("/alumno/inicio");
+                    break;
+
+                  case "administrativo":
+                    debugPrint("➡️ Navegando a /admin/inicio");
+                    context.go("/admin/inicio");
+                    break;
+
+                  default:
+                    debugPrint("⚠️ Rol desconocido, navegando a /");
+                    context.go("/");
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error al iniciar sesión: $e")),
                 );
               }
             },
@@ -204,9 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-Future<void> handleLogin(BuildContext context) async {
-  final step = await ProgressService.getStep();
-
+Future<void> handleLogin(BuildContext context, int step) async {
   switch (step) {
     case 1:
       context.go('/admision');

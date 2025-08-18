@@ -88,7 +88,6 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     super.dispose();
   }
 
-  // 🔹 Genera una contraseña temporal si aún no la recolectas en esta vista
   String _genTempPassword() {
     final rnd = Random.secure();
     const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -102,12 +101,10 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
       pick(digits),
       pick(lower),
       ...List.generate(6, (_) => pick(all)),
-    ]
-      ..shuffle(rnd);
+    ]..shuffle(rnd);
     return base.join();
   }
 
-  // 🔹 Derivar sexo/fecha/estado desde la CURP
   void _applyFromCurp(String curp) {
     final yy = int.parse(curp.substring(4, 6));
     final mm = int.parse(curp.substring(6, 8));
@@ -146,24 +143,33 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     }
   }
 
-  Future<void> _registerAspirante() async {
+    Future<void> _registerAspirante() async {
     if (_submitting) return;
 
     final nombre = _nombreCtrl.text.trim();
     final apPat = _apPatCtrl.text.trim();
     final apMat = _apMatCtrl.text.trim();
-    String curp = _curpCtrl.text.trim().toUpperCase();
+    final curp = _curpCtrl.text.trim().toUpperCase();
     final email = _emailCtrl.text.trim();
 
-    
+    // Validaciones estrictas
+    if (nombre.isEmpty || apPat.isEmpty || apMat.isEmpty) {
+      _showError('Nombre y apellidos son obligatorios');
+      return;
+    }
+    if (_sexo == null || _fechaNac == null || _estadoNac == null) {
+      _showError('Sexo, fecha y estado de nacimiento son obligatorios');
+      return;
+    }
+    if (email.isEmpty ||
+        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+      _showError('El correo electrónico es obligatorio y debe ser válido');
+      return;
+    }
 
-    final bool curpValida =
-        RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\$').hasMatch(curp);
-    final bool emailValido =
-        RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+\$').hasMatch(email);
-
-    if (curp.isEmpty && nombre.isNotEmpty && apPat.isNotEmpty && _fechaNac != null && _sexo != null && _estadoNac != null) {
-      curp = generarCurp(
+    if(curp.isEmpty) {
+      // Generar CURP si no se proporciona
+      final genCurp = generarCurp(
         nombre: nombre,
         apPat: apPat,
         apMat: apMat,
@@ -171,45 +177,15 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
         fechaNac: _fechaNac!,
         estadoNac: _estadoNac!,
       );
-      _curpCtrl.text = curp; // para que lo vea en el formulario
-    }
-
-    // Camino A: CURP + email
-    final bool caminoA = curpValida;
-    // Camino B: Nombre + Ap. Paterno + CURP
-    final bool caminoB = nombre.isNotEmpty && apPat.isNotEmpty && apMat.isNotEmpty ;
-
-    if (!emailValido) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El correo electrónico es obligatorio y debe ser válido')),
-      );
-      return;
-    }
-
-    if (!caminoA && !caminoB) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Completa CURP válida y correo, o bien Nombre, Ap. Paterno y CURP válida'),
-        ),
-      );
-      return;
-    }
-
-    // Reglas adicionales para sexo/fecha/estado
-    if (curpValida) {
-      if (_sexo == null || _fechaNac == null || _estadoNac == null) {
-        _applyFromCurp(curp);
-      }
+      _curpCtrl.text = genCurp;
     } else {
-      if (_sexo == null || _fechaNac == null || _estadoNac == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Completa sexo, fecha y estado de nacimiento')),
-        );
+      // Validar CURP proporcionada
+      if (!RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$').hasMatch(curp)) {
+        _showError('CURP inválida. Debe tener 18 caracteres y formato correcto.');
         return;
       }
     }
+
 
     setState(() => _submitting = true);
 
@@ -217,29 +193,26 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
       final body = {
         'nombre': nombre,
         'ap_paterno': apPat,
-        'ap_materno': apMat.isEmpty ? null : apMat,
-        'curp': curp.isEmpty ? null : curp,
+        'ap_materno': apMat,
+        'curp': curp,
         'password': _genTempPassword(),
-        'sexo': _sexo, // 'H' o 'M'
-        'fecha_nacimiento': _fechaNac != null
-            ? '${_fechaNac!.year.toString().padLeft(4, '0')}-${_fechaNac!.month.toString().padLeft(2, '0')}-${_fechaNac!.day.toString().padLeft(2, '0')}'
-            : null,
+        'sexo': _sexo,
+        'fecha_nacimiento':
+            '${_fechaNac!.year}-${_fechaNac!.month.toString().padLeft(2, '0')}-${_fechaNac!.day.toString().padLeft(2, '0')}',
         'estado_nacimiento': _estadoNac,
-        'email': emailValido ? email : null,
+        'email': email,
+        'step': 2,
       };
 
       final resp = await ApiClient.postJson('/aspirantes/start', body: body);
 
-      // Se espera { token, token_type, user: { ... , redirect_to } }
       final token = (resp['data']?['token'] ?? resp['token']) as String?;
-      final user =
-          (resp['data']?['user'] ?? resp['user']) as Map<String, dynamic>?;
+      final user = (resp['data']?['user'] ?? resp['user']) as Map<String, dynamic>?;
 
       if (token == null || user == null) {
         throw Exception('Respuesta inválida del servidor');
       }
 
-      // Guarda token de forma segura
       final secure = const FlutterSecureStorage();
       await secure.write(key: 'auth_token', value: token);
       await secure.write(
@@ -248,23 +221,25 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
             .toString(),
       );
 
-      // Guarda progreso local (opcional)
       ProgressService.saveStep(2);
 
-      // Redirige: si tu Resource devuelve redirect_to, úsalo
-      final redirect = user['redirect_to']?.toString() ?? '/admision/pagoexamen';
+      final redirect =
+          user['redirect_to']?.toString() ?? '/admision/pagoexamen';
       if (!mounted) return;
       context.push(redirect);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al registrar: $e')),
-      );
+      _showError('Error al registrar: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -275,35 +250,39 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;
-            final contentWidth = screenWidth.clamp(320.0, 1000.0);
+            final margin = screenWidth * 0.05;
+            final contentWidth = screenWidth.clamp(320.0, 1280.0);
             final isMobile = screenWidth < 640;
 
-            return Column(
-              children: [
-                const SizedBox(height: 24),
-                Expanded(
-                  child: Center(
-                    child: Container(
-                      width: contentWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: colors.surface,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: colors.shadow.withOpacity(0.1),
-                            blurRadius: 12,
-                          ),
-                        ],
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: margin),
+              child: Column(
+                children: [
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: Center(
+                      child: Container(
+                        width: contentWidth,
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: colors.surface,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: colors.shadow.withOpacity(0.1),
+                              blurRadius: 12,
+                            ),
+                          ],
+                        ),
+                        child: isMobile
+                            ? _buildColumnLayout(context)
+                            : _buildRowLayout(context),
                       ),
-                      child: isMobile
-                          ? _buildColumnLayout(context)
-                          : _buildRowLayout(context),
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
-              ],
+                  const SizedBox(height: 24),
+                ],
+              ),
             );
           },
         ),
@@ -372,10 +351,9 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
   }
 
   Widget _formContent(BuildContext context, {required bool isMobile}) {
-    final colors = Theme.of(context).colorScheme;
+    //final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final uri = Uri.parse(
-        'https://transparencia.puebla.gob.mx/avisos-de-privacidad-transparencia?catid=196');
+    //final uri = Uri.parse('https://transparencia.puebla.gob.mx/avisos-de-privacidad-transparencia?catid=196');
 
     Widget nombres = isMobile
         ? Column(
@@ -636,6 +614,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
       items: const [
         DropdownMenuItem(value: 'H', child: Text('Hombre')),
         DropdownMenuItem(value: 'M', child: Text('Mujer')),
+        DropdownMenuItem(value: 'N', child: Text('No binario')),
       ],
       onChanged: (v) => setState(() => _sexo = v),
     );
@@ -663,23 +642,33 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     );
   }
 
-  Widget _estadoDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _estadoNac,
-      decoration: const InputDecoration(
-        labelText: 'Estado de nacimiento',
-        prefixIcon: Icon(Icons.location_on_outlined),
-        border: OutlineInputBorder(),
-      ),
-      items: _estadosMx
-          .map((e) => DropdownMenuItem(
-                value: e['code']!,
-                child: Text('${e['name']} (${e['code']})'),
-              ))
-          .toList(),
-      onChanged: (v) => setState(() => _estadoNac = v),
-    );
-  }
+Widget _estadoDropdown() {
+  return DropdownButtonFormField<String>(
+    value: _estadoNac,
+    isExpanded: true, // 👈 evita overflow en desktop/móvil
+    decoration: const InputDecoration(
+      labelText: 'Estado de nacimiento',
+      border: OutlineInputBorder(),
+      prefixIcon: Icon(Icons.location_on_outlined), 
+    ),
+    items: _estadosMx.map((estado) {
+      return DropdownMenuItem<String>(
+        value: estado['code'],
+        child: Text(estado['name']!),
+      );
+    }).toList(),
+    onChanged: (val) {
+      setState(() => _estadoNac = val);
+    },
+    validator: (val) {
+      if (val == null || val.isEmpty) {
+        return 'Selecciona tu estado de nacimiento';
+      }
+      return null;
+    },
+  );
+}
+
 
   void _showHelpDialog() {
     showDialog(

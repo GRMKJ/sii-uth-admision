@@ -57,6 +57,7 @@ class PublicLayout extends StatelessWidget {
                       final screenWidth = constraints.maxWidth;
                       final margin = screenWidth * 0.05;
                       final contentWidth = screenWidth.clamp(320.0, 1280.0);
+                      
                       return Padding(
                         padding: EdgeInsets.symmetric(horizontal: margin),
                         child: UthHeader(maxWidth: contentWidth),

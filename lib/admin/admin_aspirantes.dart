@@ -1,15 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:siiadmision/config/api_client.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/layout/header.dart';
 import 'package:siiadmision/layout/side_navigation.dart';
 
-class AspirantesAdminScreen extends StatelessWidget {
+class AspirantesAdminScreen extends StatefulWidget {
   const AspirantesAdminScreen({super.key});
 
   @override
+  State<AspirantesAdminScreen> createState() => _AspirantesAdminScreenState();
+}
+
+class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
+  final storage = const FlutterSecureStorage();
+  Map<String, dynamic>? data;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    final token = await storage.read(key: 'auth_token');
+
+    final response = await ApiClient.getJson("/admin/aspirantes", token: token);
+    setState(() {
+      data = response['data'];
+    });
+  }
+
+  @override
+  @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final tabs = ['Todos', 'Con Pago', 'Con Documentos', 'Listos para Inscripción'];
+    final tabs = [
+      'Todos',
+      'Con Pago',
+      'Con Documentos',
+      'Listos para Inscripción',
+    ];
 
     return DefaultTabController(
       length: tabs.length,
@@ -17,6 +48,7 @@ class AspirantesAdminScreen extends StatelessWidget {
         backgroundColor: colors.surfaceContainerLowest,
         body: Row(
           children: [
+            // 🔹 Menú lateral
             SideNavigationAdmin(
               selectedIndex: 1,
               onDestinationSelected: (index) {
@@ -37,6 +69,8 @@ class AspirantesAdminScreen extends StatelessWidget {
                 }
               },
             ),
+
+            // 🔹 Contenido principal
             Expanded(
               child: SafeArea(
                 child: LayoutBuilder(
@@ -46,7 +80,7 @@ class AspirantesAdminScreen extends StatelessWidget {
 
                     return Column(
                       children: [
-                        UthHeader(maxWidth: contentWidth),
+                        UthHeader(maxWidth: contentWidth), // ✅ Header
                         const SizedBox(height: 16),
                         TabBar(
                           isScrollable: true,
@@ -71,14 +105,48 @@ class AspirantesAdminScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            child: const TabBarView(
-                              children: [
-                                _TodosTab(),
-                                _PagoTab(),
-                                _DocumentosTab(),
-                                _InscripcionTab(),
-                              ],
-                            ),
+                            child: data == null
+                                ? const Center(
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : TabBarView(
+                                    children: [
+                                      _buildList(data!['todos']),
+                                      _buildList(
+                                        data!['con_pago'],
+                                        buttonLabel: "Validar Pago",
+                                        onPressed: (context, folio) {
+                                          final pagos = data!['con_pago']
+                                              .firstWhere(
+                                                (a) =>
+                                                    a['folio_examen'] == folio,
+                                              )['pagos'];
+                                          final ref = pagos.isNotEmpty
+                                              ? pagos.first['referencia']
+                                              : null;
+                                          if (ref != null) {
+                                            context.push("/admin/$ref/pago/");
+                                          }
+                                        },
+                                      ),
+
+                                      _buildList(
+                                        data!['con_documentos'],
+                                        buttonLabel: "Ver Documentos",
+                                        onPressed: (context, folio) =>
+                                            context.push(
+                                              "/admin/aspirante/$folio/documentos",
+                                            ),
+                                      ),
+                                      _buildList(
+                                        data!['listos_inscripcion'],
+                                        buttonLabel: "Autorizar e Inscribir",
+                                        onPressed: (context, folio) => context.push(
+                                          "/admin/aspirante/$folio/inscripcion",
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                           ),
                         ),
                       ],
@@ -86,7 +154,7 @@ class AspirantesAdminScreen extends StatelessWidget {
                   },
                 ),
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -94,62 +162,33 @@ class AspirantesAdminScreen extends StatelessWidget {
   }
 }
 
-class _TodosTab extends StatelessWidget {
-  const _TodosTab();
-
-  @override
-  Widget build(BuildContext context) => _buildList('ASP001, ASP002, ASP003');
-}
-
-class _PagoTab extends StatelessWidget {
-  const _PagoTab();
-
-  @override
-  Widget build(BuildContext context) => _buildList(
-        'ASP001, ASP003',
-        buttonLabel: 'Validar Pago',
-        onPressed: (context, folio) => context.push('/admin/aspirante/$folio/pago'),
-      );
-}
-
-class _DocumentosTab extends StatelessWidget {
-  const _DocumentosTab();
-
-  @override
-  Widget build(BuildContext context) => _buildList(
-        'ASP002, ASP004',
-        buttonLabel: 'Ver Documentos',
-        onPressed: (context, folio) => context.push('/admin/aspirante/$folio/documentos'),
-      );
-}
-
-class _InscripcionTab extends StatelessWidget {
-  const _InscripcionTab();
-
-  @override
-  Widget build(BuildContext context) => _buildList(
-        'ASP005',
-        buttonLabel: 'Autorizar e Inscribir',
-        onPressed: (context, folio) => context.push('/admin/aspirante/$folio/inscripcion'),
-      );
-}
-
 Widget _buildList(
-  String items, {
+  List<dynamic> aspirantes, {
   String? buttonLabel,
   void Function(BuildContext, String)? onPressed,
 }) {
-  final list = items.split(', ');
-
   return ListView.separated(
-    itemCount: list.length,
+    itemCount: aspirantes.length,
     separatorBuilder: (_, __) => const Divider(),
     itemBuilder: (context, index) {
-      final folio = list[index];
+      final asp = aspirantes[index];
+      final folio = asp['folio_examen'] ?? 'SIN FOLIO';
+      final nombre =
+          "${asp['nombre']} ${asp['ap_paterno']} ${asp['ap_materno']}".trim();
+
+      // 🔹 Manejo de pagos
+      final pagos = asp['pagos'] as List<dynamic>? ?? [];
+      final pago = pagos.isNotEmpty ? pagos.first : null;
+
+      final pagoInfo = pago != null
+          ? "Ref: ${pago['referencia']} - ${pago['estado_validacion']}"
+          : "Sin pago";
+
       return ListTile(
         leading: const Icon(Icons.person_outline),
-        title: Text('Folio: $folio'),
-        subtitle: const Text('Nombre del aspirante'),
+        title: Text(nombre),
+        subtitle: Text("Folio: $folio\n$pagoInfo"),
+        isThreeLine: true, // para que no se corte el texto
         trailing: buttonLabel != null
             ? ElevatedButton(
                 onPressed: () => onPressed?.call(context, folio),

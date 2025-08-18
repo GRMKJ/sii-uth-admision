@@ -18,8 +18,10 @@ import 'package:siiadmision/config/session.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-void main() {
+void main() async {
   setUrlStrategy(PathUrlStrategy());
+  WidgetsFlutterBinding.ensureInitialized();
+  await Session().load(); 
   runApp(const MyApp());
 }
 
@@ -67,9 +69,9 @@ final GoRouter _router = GoRouter(
     // Rutas privadas de admin
     GoRoute(path: '/admin/inicio', builder: (_, __) => const DashboardAdminScreen()),
     GoRoute(path: '/admin/aspirantes', builder: (_, __) => const AspirantesAdminScreen()),
-    GoRoute(path: '/admin/aspirante/:folio/pago', builder: (context, state) => ValidarPagoScreen(folio: state.params['folio']!)),
-    GoRoute(path: '/admin/aspirante/:folio/documentos', builder: (context, state) => VerDocumentosScreen(folio: state.params['folio']!)),
-    GoRoute(path: '/admin/aspirante/:folio/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.params['folio']!)),
+    GoRoute(path: '/admin/aspirante/:referencia/pago', builder: (context, state) => PagoDetalleScreen(referencia: state.params['referencia']!)),
+    GoRoute(path: '/admin/aspirante/:referencia/documentos', builder: (context, state) => VerDocumentosScreen(folio: state.params['referencia']!)),
+    GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.params['referencia']!)),
   ],
 );
 

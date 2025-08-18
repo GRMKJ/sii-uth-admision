@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:siiadmision/config/api_client.dart';
+
 
 class ValidarPagoScreen extends StatelessWidget {
   final String folio;
@@ -112,6 +115,92 @@ class _DocumentoItem extends StatelessWidget {
         icon: const Icon(Icons.check_circle_outline),
         onPressed: () {},
         tooltip: 'Validar',
+      ),
+    );
+  }
+}
+
+class PagoDetalleScreen extends StatefulWidget {
+  final String referencia;
+  const PagoDetalleScreen({super.key, required this.referencia});
+
+  @override
+  State<PagoDetalleScreen> createState() => _PagoDetalleScreenState();
+}
+
+class _PagoDetalleScreenState extends State<PagoDetalleScreen> {
+  Map<String, dynamic>? data;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDetalle();
+  }
+
+  Future<void> _fetchDetalle() async {
+    final token = await const FlutterSecureStorage().read(key: 'auth_token');
+    final response = await ApiClient.getJson("/admin/pago/${widget.referencia}", token: token);
+    setState(() => data = response['data']);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (data == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final aspirante = data!['aspirante'];
+    final pago = data!['pago'];
+
+    return Scaffold(
+      appBar: AppBar(title: Text("Pago Ref: ${pago['referencia']}")),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("${aspirante['nombre']} ${aspirante['ap_paterno']} ${aspirante['ap_materno']}",
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text("Carrera: ${aspirante['carrera']?['carrera'] ?? 'Sin carrera'}"),
+            Text("Teléfono: ${aspirante['telefono']}"),
+            const Divider(),
+            Text("Referencia: ${pago['referencia']}"),
+            Text("Estado: ${pago['estado_validacion']}"),
+            const Spacer(),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await ApiClient.postJson("/admin/pago/${widget.referencia}/validar");
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Pago validado")),
+                      );
+                      _fetchDetalle();
+                    },
+                    icon: const Icon(Icons.check),
+                    label: const Text("Validar Pago"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final res = await ApiClient.postJson("/admin/pago/${widget.referencia}/generar-folio");
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Folio generado: ${res['folio']}")),
+                      );
+                      _fetchDetalle();
+                    },
+                    icon: const Icon(Icons.assignment),
+                    label: const Text("Generar Folio"),
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
