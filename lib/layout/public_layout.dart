@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:siiadmision/header.dart';
-import 'package:siiadmision/side_navigation.dart';
+import 'package:siiadmision/layout/header.dart';
+import 'package:siiadmision/layout/side_navigation.dart';
 import 'package:go_router/go_router.dart';
 
 class PublicLayout extends StatelessWidget {
@@ -23,7 +23,7 @@ class PublicLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
+    final location = GoRouter.of(context).location;
     final selectedIndex = _getSelectedIndex(location);
 
     return Scaffold(

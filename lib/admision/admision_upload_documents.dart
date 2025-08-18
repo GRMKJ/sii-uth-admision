@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:siiadmision/config/aspirante_progress.dart';
 
 class UploadDocumentsScreen extends StatefulWidget {
   const UploadDocumentsScreen({super.key});
@@ -230,6 +231,7 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Documentos enviados para revisión')),
                           );
+                          ProgressService.saveStep(5);
 
                           // Ejemplo: context.push('/siguiente-pantalla');
                         }
@@ -307,7 +309,7 @@ class DocumentUploadForm extends StatelessWidget {
   }
 
   Future<void> uploadFile(String path, String documentName) async {
-  final uri = Uri.parse('https://tuservidor.com/api/subir-documento');
+  final uri = Uri.parse('https://127.0.0.1:8000/api/subir-documento');
 
   final request = http.MultipartRequest('POST', uri)
     ..fields['documento'] = documentName

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:siiadmision/header.dart';
-import 'package:siiadmision/side_navigation.dart';
+import 'package:siiadmision/layout/header.dart';
+import 'package:siiadmision/layout/side_navigation.dart';
 import 'package:go_router/go_router.dart';
 
 class DashboardAlumnoScreen extends StatefulWidget {

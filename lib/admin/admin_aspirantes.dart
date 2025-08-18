@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:siiadmision/header.dart';
-import 'package:siiadmision/side_navigation.dart';
+import 'package:siiadmision/layout/header.dart';
+import 'package:siiadmision/layout/side_navigation.dart';
 
 class AspirantesAdminScreen extends StatelessWidget {
   const AspirantesAdminScreen({super.key});
@@ -30,6 +30,10 @@ class AspirantesAdminScreen extends StatelessWidget {
                   case 7:
                     context.go('/');
                     break;
+                  default:
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Modulo No Implementado')),
+                    );
                 }
               },
             ),
@@ -101,39 +105,54 @@ class _PagoTab extends StatelessWidget {
   const _PagoTab();
 
   @override
-  Widget build(BuildContext context) => _buildList('ASP001, ASP003', buttonLabel: 'Validar Pago');
+  Widget build(BuildContext context) => _buildList(
+        'ASP001, ASP003',
+        buttonLabel: 'Validar Pago',
+        onPressed: (context, folio) => context.push('/admin/aspirante/$folio/pago'),
+      );
 }
 
 class _DocumentosTab extends StatelessWidget {
   const _DocumentosTab();
 
   @override
-  Widget build(BuildContext context) => _buildList('ASP002, ASP004', buttonLabel: 'Ver Documentos');
+  Widget build(BuildContext context) => _buildList(
+        'ASP002, ASP004',
+        buttonLabel: 'Ver Documentos',
+        onPressed: (context, folio) => context.push('/admin/aspirante/$folio/documentos'),
+      );
 }
 
 class _InscripcionTab extends StatelessWidget {
   const _InscripcionTab();
 
   @override
-  Widget build(BuildContext context) => _buildList('ASP005', buttonLabel: 'Autorizar e Inscribir');
+  Widget build(BuildContext context) => _buildList(
+        'ASP005',
+        buttonLabel: 'Autorizar e Inscribir',
+        onPressed: (context, folio) => context.push('/admin/aspirante/$folio/inscripcion'),
+      );
 }
 
-Widget _buildList(String items, {String? buttonLabel}) {
+Widget _buildList(
+  String items, {
+  String? buttonLabel,
+  void Function(BuildContext, String)? onPressed,
+}) {
   final list = items.split(', ');
 
   return ListView.separated(
     itemCount: list.length,
     separatorBuilder: (_, __) => const Divider(),
     itemBuilder: (context, index) {
+      final folio = list[index];
       return ListTile(
         leading: const Icon(Icons.person_outline),
-        title: Text('Folio: ${list[index]}'),
+        title: Text('Folio: $folio'),
         subtitle: const Text('Nombre del aspirante'),
         trailing: buttonLabel != null
             ? ElevatedButton(
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$buttonLabel a ${list[index]}')),
-                ),
+                onPressed: () => onPressed?.call(context, folio),
                 child: Text(buttonLabel),
               )
             : null,

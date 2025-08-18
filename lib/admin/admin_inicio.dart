@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:siiadmision/header.dart';
-import 'package:siiadmision/side_navigation.dart';
+import 'package:siiadmision/layout/header.dart';
+import 'package:siiadmision/layout/side_navigation.dart';
 
 class DashboardAdminScreen extends StatelessWidget {
   const DashboardAdminScreen({super.key});
@@ -86,7 +86,7 @@ class DashboardAdminScreen extends StatelessWidget {
                                       icon: Icons.upload_file,
                                     ),
                                     _DashboardCard(
-                                      title: 'Alumnos Insctritos',
+                                      title: 'Alumnos Inscritos',
                                       count: 50,
                                       icon: Icons.verified_user,
                                     ),

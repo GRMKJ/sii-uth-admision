@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:siiadmision/config/aspirante_progress.dart';
 
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
@@ -293,6 +294,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Registro confirmado')),
                           );
+                          ProgressService.saveStep(3);
                           context.push('/admision/pagoexamen/status');
                         }
                       : null,

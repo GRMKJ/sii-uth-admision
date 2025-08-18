@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:siiadmision/config/session.dart';
+import 'package:siiadmision/config/aspirante_progress.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -176,10 +178,13 @@ class _LoginScreenState extends State<LoginScreen> {
               final pass = _passwordController.text;
 
               if (user == 'ASP123456' && pass == 'aspirante') {
+                Session().loginAs('aspirante');
                 context.go('/admision');
               } else if (user == 'ALU2025001' && pass == 'alumno') {
+                Session().loginAs('alumno');
                 context.go('/alumno/inicio');
               } else if (user == 'ADM001' && pass == 'admin') {
+                Session().loginAs('admin');
                 context.go('/admin/inicio');
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -196,5 +201,32 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ],
     );
+  }
+}
+
+Future<void> handleLogin(BuildContext context) async {
+  final step = await ProgressService.getStep();
+
+  switch (step) {
+    case 1:
+      context.go('/admision');
+      break;
+    case 2:
+      context.go('/admision/pagoexamen');
+      break;
+    case 3:
+      context.go('/admision/pagoexamen/status');
+      break;
+    case 4:
+      context.go('/admision/documentos/subida');
+      break;
+    case 5:
+      context.go('/admision/documentos/estado');
+      break;
+    case 6:
+      context.go('/alumno/inicio');
+      break;
+    default:
+      context.go('/');
   }
 }
