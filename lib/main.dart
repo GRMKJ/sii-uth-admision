@@ -26,6 +26,7 @@ void main() async {
 }
 
 final GoRouter _router = GoRouter(
+  debugLogDiagnostics: true,
   initialLocation: '/',
   redirect: (context, state) {
     final session = Session();
@@ -70,8 +71,8 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/admin/inicio', builder: (_, __) => const DashboardAdminScreen()),
     GoRoute(path: '/admin/aspirantes', builder: (_, __) => const AspirantesAdminScreen()),
     GoRoute(path: '/admin/aspirante/:referencia/pago', builder: (context, state) => PagoDetalleScreen(referencia: state.params['referencia']!)),
-    GoRoute(path: '/admin/aspirante/:referencia/documentos', builder: (context, state) => VerDocumentosScreen(folio: state.params['referencia']!)),
-    GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.params['referencia']!)),
+    GoRoute(path: '/admin/aspirante/:referencia/documentos', builder: (context, state) => VerDocumentosScreen(referencia: state.params['referencia']!)),
+    GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(referencia: state.params['referencia']!)),
   ],
 );
 

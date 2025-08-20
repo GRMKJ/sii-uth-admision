@@ -115,17 +115,31 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
                                       _buildList(
                                         data!['con_pago'],
                                         buttonLabel: "Validar Pago",
-                                        onPressed: (context, folio) {
-                                          final pagos = data!['con_pago']
-                                              .firstWhere(
-                                                (a) =>
-                                                    a['folio_examen'] == folio,
-                                              )['pagos'];
+                                        onPressed: (context, asp) {
+                                          final pagos =
+                                              (asp['pagos'] as List?) ??
+                                              const [];
                                           final ref = pagos.isNotEmpty
-                                              ? pagos.first['referencia']
+                                              ? (pagos.first
+                                                        as Map)['referencia']
+                                                    as String?
                                               : null;
-                                          if (ref != null) {
-                                            context.push("/admin/$ref/pago/");
+
+                                          if (ref != null && ref.isNotEmpty) {
+                                            context.push(
+                                              "/admin/aspirante/$ref/pago",
+                                            ); // ← sin slash final
+                                            // o pushNamed('pagoDetalle', pathParameters: {'referencia': ref});
+                                          } else {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Este aspirante no tiene referencia de pago',
+                                                ),
+                                              ),
+                                            );
                                           }
                                         },
                                       ),
@@ -165,21 +179,20 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
 Widget _buildList(
   List<dynamic> aspirantes, {
   String? buttonLabel,
-  void Function(BuildContext, String)? onPressed,
+  void Function(BuildContext, Map<String, dynamic>)?
+  onPressed, // ← cambia firma
 }) {
   return ListView.separated(
     itemCount: aspirantes.length,
     separatorBuilder: (_, __) => const Divider(),
     itemBuilder: (context, index) {
-      final asp = aspirantes[index];
-      final folio = asp['folio_examen'] ?? 'SIN FOLIO';
+      final asp = (aspirantes[index] as Map).cast<String, dynamic>();
+      final folio = asp['folio_examen'] ?? 'Sin Folio';
       final nombre =
           "${asp['nombre']} ${asp['ap_paterno']} ${asp['ap_materno']}".trim();
 
-      // 🔹 Manejo de pagos
-      final pagos = asp['pagos'] as List<dynamic>? ?? [];
-      final pago = pagos.isNotEmpty ? pagos.first : null;
-
+      final pagos = (asp['pagos'] as List?) ?? const [];
+      final pago = pagos.isNotEmpty ? (pagos.first as Map) : null;
       final pagoInfo = pago != null
           ? "Ref: ${pago['referencia']} - ${pago['estado_validacion']}"
           : "Sin pago";
@@ -188,10 +201,12 @@ Widget _buildList(
         leading: const Icon(Icons.person_outline),
         title: Text(nombre),
         subtitle: Text("Folio: $folio\n$pagoInfo"),
-        isThreeLine: true, // para que no se corte el texto
+        isThreeLine: true,
         trailing: buttonLabel != null
             ? ElevatedButton(
-                onPressed: () => onPressed?.call(context, folio),
+                onPressed: onPressed == null
+                    ? null
+                    : () => onPressed(context, asp), // ← pasa asp
                 child: Text(buttonLabel),
               )
             : null,
