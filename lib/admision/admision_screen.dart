@@ -240,6 +240,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
       SnackBar(content: Text(msg)),
     );
   }
+  
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;

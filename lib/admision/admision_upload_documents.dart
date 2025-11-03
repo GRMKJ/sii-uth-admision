@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/aspirante_progress.dart';
 
 class UploadDocumentsScreen extends StatefulWidget {
@@ -11,15 +12,28 @@ class UploadDocumentsScreen extends StatefulWidget {
 }
 
 class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final Map<String, bool> _uploadedStatus = {
-    'Acta de Nacimiento': true,
-    'CURP actualizado': true,
-    'Certificado de Bachillerato o Constancia': true,
-    'Foto Tamaño Infantil': true,
-    'Comprobante de Número de Seguridad Social del IMSS': true,
-    'Comprobante de Domicilio': true,
-    'Pago de Inscripción y Orden de Cobro': true,
-    'Pago de Seguro y Credencial': true,
+    'Acta de Nacimiento': false,
+    'CURP actualizado': false,
+    'Certificado de Bachillerato o Constancia': false,
+    'Foto Tamaño Infantil': false,
+    'Comprobante de Número de Seguridad Social del IMSS': false,
+    'Comprobante de Domicilio': false,
+    'Pago de Inscripción y Orden de Cobro': false,
+    'Pago de Seguro y Credencial': false,
+  };
+
+  // Estado de verificación por documento (muestra spinner mientras sube/verifica)
+  final Map<String, bool> _verifyingStatus = {
+    'Acta de Nacimiento': false,
+    'CURP actualizado': false,
+    'Certificado de Bachillerato o Constancia': false,
+    'Foto Tamaño Infantil': false,
+    'Comprobante de Número de Seguridad Social del IMSS': false,
+    'Comprobante de Domicilio': false,
+    'Pago de Inscripción y Orden de Cobro': false,
+    'Pago de Seguro y Credencial': false,
   };
 
   bool get _allUploaded => _uploadedStatus.values.every((uploaded) => uploaded);
@@ -28,6 +42,45 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
     setState(() {
       _uploadedStatus[label] = true;
     });
+    // Sincroniza con el servidor por si hay más cambios
+    _refreshStatuses();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Traer estados desde el servidor al entrar a la vista
+    _refreshStatuses();
+  }
+
+  Future<void> _refreshStatuses() async {
+    try {
+      final token = await _storage.read(key: 'auth_token');
+      if (token == null || token.isEmpty) return;
+
+      final res = await ApiClient.getJson('/documentos', token: token);
+      if (res['success'] == true && res['documentos'] is List) {
+        final docs = (res['documentos'] as List).cast<dynamic>();
+        final uploadedNames = <String>{};
+        for (final d in docs) {
+          try {
+            final m = d as Map<String, dynamic>;
+            final nombre = (m['nombre'] ?? '').toString();
+            final archivo = (m['archivo_pat'] ?? m['archivo_url'] ?? '').toString();
+            if (nombre.isNotEmpty && archivo.isNotEmpty) {
+              uploadedNames.add(nombre);
+            }
+          } catch (_) {}
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _uploadedStatus.updateAll((key, value) => uploadedNames.contains(key));
+        });
+      }
+    } catch (_) {
+      // opcional: mostrar snackBar o loguear
+    }
   }
 
   @override
@@ -102,7 +155,13 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
                                           child: SingleChildScrollView(
                                             child: DocumentUploadForm(
                                               uploadedStatus: _uploadedStatus,
+                                              verifyingStatus: _verifyingStatus,
                                               onUpload: _uploadDocument,
+                                              onVerifying: (label, v) {
+                                                setState(() {
+                                                  _verifyingStatus[label] = v;
+                                                });
+                                              },
                                             ),
                                           ),
                                         ),
@@ -250,13 +309,96 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
 
 class DocumentUploadForm extends StatelessWidget {
   final Map<String, bool> uploadedStatus;
+  final Map<String, bool> verifyingStatus;
   final void Function(String) onUpload;
+  final void Function(String, bool) onVerifying;
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  const DocumentUploadForm({super.key, required this.uploadedStatus, required this.onUpload});
+  // Controlador para la referencia de pago de inscripción
+  final Map<String, TextEditingController> _textControllers = {
+    'Pago de Inscripción y Orden de Cobro': TextEditingController(),
+  };
+
+  DocumentUploadForm({
+    super.key,
+    required this.uploadedStatus,
+    required this.verifyingStatus,
+    required this.onUpload,
+    required this.onVerifying,
+  });
 
   Widget _uploadField(BuildContext context, String label, bool uploaded) {
     final statusText = uploaded ? 'Cargado' : 'Pendiente';
     final statusColor = uploaded ? Colors.green : Colors.orange;
+    final isVerifying = verifyingStatus[label] == true;
+
+    // Caso especial: Pago de Inscripción y Orden de Cobro
+    if (label == 'Pago de Inscripción y Orden de Cobro') {
+      final refController = _textControllers[label]!;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            Expanded(
+              flex: 3,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: refController,
+                      decoration: const InputDecoration(
+                        hintText: 'Referencia / Folio',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: (isVerifying || uploaded)
+                        ? null
+                        : () => _verifyInscripcion(context, label, refController.text.trim()),
+                    child: const Text('Verificar'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (isVerifying)
+              Chip(
+                avatar: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+                  ),
+                ),
+                label: const Text('Verificando...'),
+              )
+            else if (uploaded)
+              Chip(
+                label: const Text('Cargado'),
+                backgroundColor: Colors.green.withOpacity(0.2),
+                labelStyle: const TextStyle(color: Colors.green),
+                side: const BorderSide(color: Colors.green),
+              )
+            else
+              Chip(
+                label: const Text('Verificar'),
+                backgroundColor: Colors.blue.withOpacity(0.15),
+                labelStyle: const TextStyle(color: Colors.blue),
+                side: const BorderSide(color: Colors.blue),
+              ),
+          ],
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
@@ -269,21 +411,69 @@ class DocumentUploadForm extends StatelessWidget {
           Expanded(
             flex: 3,
             child: OutlinedButton.icon(
-              onPressed: () => pickPdf(label),
+              onPressed: (isVerifying || uploaded) ? null : () => pickPdf(context, label),
               icon: const Icon(Icons.upload_file),
               label: const Text('Subir archivo PDF'),
             ),
           ),
           const SizedBox(width: 8),
-          Chip(
-            label: Text(statusText),
-            backgroundColor: statusColor.withOpacity(0.2),
-            labelStyle: TextStyle(color: statusColor),
-            side: BorderSide(color: statusColor),
-          ),
+          isVerifying
+              ? Chip(
+                  avatar: SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+                    ),
+                  ),
+                  label: const Text('Verificando...'),
+                )
+              : Chip(
+                  label: Text(statusText),
+                  backgroundColor: statusColor.withOpacity(0.2),
+                  labelStyle: TextStyle(color: statusColor),
+                  side: BorderSide(color: statusColor),
+                ),
         ],
       ),
     );
+  }
+
+  Future<void> _verifyInscripcion(BuildContext context, String label, String referencia) async {
+    final scaffold = ScaffoldMessenger.of(context);
+    if (referencia.isEmpty) {
+      scaffold.showSnackBar(const SnackBar(content: Text('Ingresa la referencia para verificar')));
+      return;
+    }
+
+    try {
+      onVerifying(label, true);
+      final token = await _storage.read(key: 'auth_token');
+      if (token == null || token.isEmpty) {
+        scaffold.showSnackBar(const SnackBar(content: Text('No autenticado')));
+        return;
+      }
+
+      // Ajusta el endpoint según tu backend real
+      final res = await ApiClient.postJson(
+        '/pagos/inscripcion/verify',
+        body: {'referencia': referencia},
+        token: token,
+      );
+
+      if (res['success'] == true) {
+        onUpload(label);
+        scaffold.showSnackBar(const SnackBar(content: Text('Referencia verificada')));
+      } else {
+        final msg = (res['message'] ?? 'No verificado').toString();
+        scaffold.showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      scaffold.showSnackBar(SnackBar(content: Text('Error al verificar: $e')));
+    } finally {
+      onVerifying(label, false);
+    }
   }
 
   @override
@@ -294,36 +484,94 @@ class DocumentUploadForm extends StatelessWidget {
     );
   }
 
-    Future<void> pickPdf(String documentName) async {
+    Future<void> pickPdf(BuildContext context, String documentName) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
 
-    if (result != null && result.files.single.path != null) {
+    if (result != null) {
       final file = result.files.single;
+      // En web, acceder a `path` lanza una excepción. Usa bytes si están disponibles.
+      final bytes = file.bytes; // no-nulo en web
+      final filename = file.name;
+      final String? safePath = bytes != null ? null : file.path; // solo leer path si no hay bytes
 
-      // Aquí puedes enviar el archivo al servidor
-      await uploadFile(file.path!, documentName);
+      if (safePath == null && bytes == null) {
+        return; // nothing to upload
+      }
+      // Subir el archivo al servidor y verificar
+      onVerifying(documentName, true);
+      await uploadFile(
+        context,
+        path: safePath,
+        bytes: bytes,
+        filename: filename,
+        documentName: documentName,
+      );
+      onVerifying(documentName, false);
     }
   }
 
-  Future<void> uploadFile(String path, String documentName) async {
-  final uri = Uri.parse('https://127.0.0.1:8000/api/subir-documento');
+  Future<void> uploadFile(
+    BuildContext context, {
+    String? path,
+    List<int>? bytes,
+    required String filename,
+    required String documentName,
+  }) async {
+    final scaffold = ScaffoldMessenger.of(context);
+    try {
+      final token = await _storage.read(key: 'auth_token');
+      if (token == null || token.isEmpty) {
+        scaffold.showSnackBar(const SnackBar(content: Text('No autenticado')));
+        return;
+      }
 
-  final request = http.MultipartRequest('POST', uri)
-    ..fields['documento'] = documentName
-    ..files.add(await http.MultipartFile.fromPath('archivo', path));
+      // 1) Subir archivo
+      final uploadRes = await ApiClient.postMultipart(
+        '/documentos',
+        fileField: 'archivo',
+        filePath: path,
+        fileBytes: bytes,
+        fileName: filename,
+        fields: {'documento': documentName},
+        token: token,
+      );
 
-  final response = await request.send();
+      if (uploadRes['success'] != true) {
+        throw Exception(uploadRes['message'] ?? 'Error al subir el documento');
+      }
 
-  if (response.statusCode == 200) {
-    // Éxito
-    print('Documento subido correctamente');
-  } else {
-    // Error
-    print('Error al subir el documento');
+      // 2) Verificar en servidor que exista el documento
+      final verify = await ApiClient.getJson('/documentos', token: token);
+      if (verify['success'] == true && verify['documentos'] is List) {
+        final docs = (verify['documentos'] as List).cast<dynamic>();
+        final found = docs.any((d) {
+          try {
+            final m = d as Map<String, dynamic>;
+            final nombre = (m['nombre'] ?? '').toString();
+            final archivo = (m['archivo_pat'] ?? '').toString();
+            return nombre == documentName && archivo.isNotEmpty;
+          } catch (_) {
+            return false;
+          }
+        });
+
+        if (found) {
+          onUpload(documentName);
+          scaffold.showSnackBar(SnackBar(content: Text('"$documentName" subido y verificado')));
+        } else {
+          throw Exception('El servidor no refleja el archivo subido aún');
+        }
+      } else {
+        throw Exception('No se pudo verificar documentos');
+      }
+    } catch (e) {
+      scaffold.showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      onVerifying(documentName, false);
+    }
   }
-}
 
 }

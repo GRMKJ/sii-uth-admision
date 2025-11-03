@@ -160,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () {},
+            onPressed: () => context.go('/forgot'),
             child: const Text('¿Olvidaste tu contraseña?'),
           ),
         ),
@@ -201,9 +201,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 final user = data["user"] as Map<String, dynamic>;
                 final role = user["role"] as String;
 
-                debugPrint("✅ Token recibido: $token");
-                debugPrint("✅ Rol detectado: $role");
-
                 await storage.write(key: "auth_token", value: token);
                 await storage.write(key: "role", value: role);
 
@@ -219,7 +216,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
 
                     if (stepResponse["success"] == true) {
-                      final step = stepResponse["step"] as int;
+                      // El backend puede devolver `step` como int o como String.
+                      dynamic rawStep;
+                      if (stepResponse.containsKey('step')) {
+                        rawStep = stepResponse['step'];
+                      } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
+                        rawStep = (stepResponse['data'] as Map)['step'];
+                      }
+
+                      if (rawStep == null) {
+                        throw Exception('Respuesta inválida: step no encontrado');
+                      }
+
+                      int? step;
+                      if (rawStep is int) {
+                        step = rawStep;
+                      } else if (rawStep is String) {
+                        step = int.tryParse(rawStep);
+                      }
+
+                      if (step == null) {
+                        throw Exception('Valor de step inválido: $rawStep');
+                      }
+
                       debugPrint("➡️ Progreso detectado: step $step");
                       // Usa tu función para mandar al paso correcto
                       handleLogin(context, step);

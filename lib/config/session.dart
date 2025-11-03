@@ -5,7 +5,7 @@ class Session {
   factory Session() => _instance;
   Session._internal();
 
-  String? role; // 'admin' o 'alumno'
+  String? role;
   bool get isLoggedIn => role != null;
   bool get isAspirante => role == 'aspirante';
   bool get isAdmin => role == 'admin';

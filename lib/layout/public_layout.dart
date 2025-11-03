@@ -5,17 +5,18 @@ import 'package:go_router/go_router.dart';
 
 class PublicLayout extends StatelessWidget {
   final Widget child;
+  final String location;
 
   const PublicLayout({
     super.key,
     required this.child,
+    required this.location,
   });
 
   /// Deducción automática del índice según la ruta actual
   int _getSelectedIndex(String location) {
+    if (location == '/') return 0;
     if (location.startsWith('/admision')) return 1;
-    if (location.startsWith('/admision/pagoexamen')) return 1;
-    if (location.startsWith('/admision/pagoexamen/status')) return 1;
     if (location.startsWith('/uth')) return 2;
     if (location.startsWith('/settings')) return 3;
     return 0;
@@ -23,7 +24,9 @@ class PublicLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final location = GoRouter.of(context).location;
+    // Use the `location` passed from the ShellRoute builder so the layout
+    // rebuilds when GoRouter updates the shell. This avoids trying to
+    // listen to the router manually and works across go_router versions.
     final selectedIndex = _getSelectedIndex(location);
 
     return Scaffold(
