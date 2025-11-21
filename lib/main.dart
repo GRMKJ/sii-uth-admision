@@ -12,6 +12,7 @@ import 'package:siiadmision/login/forgot_password_screen.dart';
 import 'package:siiadmision/admision/admision_screen.dart';
 import 'package:siiadmision/admision/admision_payment_screen.dart';
 import 'package:siiadmision/admision/admision_payment_status.dart';
+import 'package:siiadmision/login/reset_password_screen.dart';
 import 'package:siiadmision/theme/theme.dart';
 import 'package:siiadmision/layout/side_navigation.dart';
 import 'package:siiadmision/alumno/alumno_inicio.dart';
@@ -94,6 +95,11 @@ final GoRouter _router = GoRouter(
         GoRoute(path: '/admision/documentos/estado', builder: (_, __) => const DocumentosStatusScreen()),
       ],
     ),
+    GoRoute(
+      path: '/reset',
+      name: 'reset',
+      builder: (context, state) => _ResetRouteWrapper(state: state),
+    ),
 
     // Rutas privadas de alumno
     GoRoute(
@@ -109,6 +115,32 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.pathParameters['referencia']!)),
   ],
 );
+
+class _ResetRouteWrapper extends StatelessWidget {
+  final GoRouterState state;
+
+  const _ResetRouteWrapper({
+    required this.state,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final token = state.uri.queryParameters['token'] ?? '';
+    final email = state.uri.queryParameters['email'] ?? '';
+    final role = state.uri.queryParameters['role'] ?? 'desconocido';
+
+    final location = state.uri.path.isNotEmpty ? state.uri.path : '/';
+    final child = (token.isEmpty || email.isEmpty)
+        ? const Center(child: Text('Link de restablecimiento inválido o incompleto'))
+        : ResetPasswordScreen(email: email, token: token, role: role);
+
+    return PublicLayout(
+      key: ValueKey(location),
+      child: child,
+      location: location,
+    );
+  }
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
