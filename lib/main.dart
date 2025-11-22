@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:go_router/go_router.dart';
+import 'package:root_jailbreak_detector/root_jailbreak_detector.dart';
 import 'package:siiadmision/admin/admin_aspirantes.dart';
 import 'package:siiadmision/admision/admision_documents.dart';
 import 'package:siiadmision/admision/admision_status_documents.dart';
@@ -38,13 +38,14 @@ void main() async {
 
   if (isMobile) {
     try {
-      if (await FlutterJailbreakDetection.jailbroken == true) {
+      final bool? jailbroken = await RootJailbreakDetector().isRooted();
+      if (jailbroken == true) {
         SystemChannels.platform.invokeMethod('SystemNavigator.pop');
       }
     } on MissingPluginException catch (e) {
-      debugPrint('Jailbreak plugin missing: $e');
+      debugPrint('Root/jailbreak plugin missing: $e');
     } catch (e, st) {
-      debugPrint('Jailbreak detection check failed: $e\n$st');
+      debugPrint('Root/jailbreak detection failed: $e\n$st');
     }
   } else {
     debugPrint('Skipping jailbreak detection: not running on Android/iOS. Platform version: ${PlatformInfo.version}');
