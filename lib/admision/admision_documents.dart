@@ -31,10 +31,10 @@ class DocumentosScreen extends StatelessWidget {
                               color: colors.surface,
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: [
-                                BoxShadow(
-                                  color: colors.shadow.withOpacity(0.1),
-                                  blurRadius: 12,
-                                ),
+                                      BoxShadow(
+                                        color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                        blurRadius: 12,
+                                      ),
                               ],
                             ),
                             child: Row(

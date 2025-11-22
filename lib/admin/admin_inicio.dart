@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:siiadmision/layout/header.dart';
-import 'package:siiadmision/layout/side_navigation.dart';
+import 'package:siiadmision/widgets/sidebar.dart';
 import 'package:siiadmision/config/api_client.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -84,6 +84,9 @@ class _DashboardAdminScreenState extends State<DashboardAdminScreen> {
                 case 1:
                   context.go('/admin/aspirantes');
                   break;
+                case 2:
+                  context.go('/admin/finanzas');
+                  break;
                 case 7:
                   context.go('/');
                   break;
@@ -113,7 +116,7 @@ class _DashboardAdminScreenState extends State<DashboardAdminScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: colors.shadow.withOpacity(0.1),
+                                        color: colors.shadow.withAlpha((0.1 * 255).round()),
                                         blurRadius: 12,
                                       ),
                                     ],
@@ -195,9 +198,9 @@ class _DashboardCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: colors.shadow.withOpacity(0.05),
-            blurRadius: 8,
-          ),
+              color: colors.shadow.withAlpha((0.05 * 255).round()),
+              blurRadius: 8,
+            ),
         ],
       ),
       child: Column(

@@ -3,7 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:siiadmision/config/api_client.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/layout/header.dart';
-import 'package:siiadmision/layout/side_navigation.dart';
+import 'package:siiadmision/widgets/sidebar.dart';
+import 'package:siiadmision/admin/admin_aspirantes_detalles.dart';
 
 class AspirantesAdminScreen extends StatefulWidget {
   const AspirantesAdminScreen({super.key});
@@ -24,10 +25,10 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
 
   Future<void> _fetchData() async {
     final token = await storage.read(key: 'auth_token');
-
     final response = await ApiClient.getJson("/admin/aspirantes", token: token);
     setState(() {
       data = response['data'];
+      debugPrint("DATA: $data"); 
     });
   }
 
@@ -59,6 +60,9 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
                   case 1:
                     context.go('/admin/aspirantes');
                     break;
+                  case 2:
+                    context.go('/admin/finanzas');
+                  break;
                   case 7:
                     context.go('/');
                     break;
@@ -98,9 +102,9 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
                             decoration: BoxDecoration(
                               color: colors.surface,
                               borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
+                                boxShadow: [
                                 BoxShadow(
-                                  color: colors.shadow.withOpacity(0.05),
+                                  color: colors.shadow.withAlpha((0.05 * 255).round()),
                                   blurRadius: 10,
                                 ),
                               ],
@@ -173,6 +177,8 @@ Widget _buildList(
     itemBuilder: (context, index) {
       final asp = aspirantes[index];
       final folio = asp['folio_examen'] ?? 'SIN FOLIO';
+      final aspiranteId = asp['id_aspirantes']?.toString();
+      final hasId = aspiranteId != null && aspiranteId.isNotEmpty;
       final nombre =
           "${asp['nombre']} ${asp['ap_paterno']} ${asp['ap_materno']}".trim();
 
@@ -189,12 +195,30 @@ Widget _buildList(
         title: Text(nombre),
         subtitle: Text("Folio: $folio\n$pagoInfo"),
         isThreeLine: true, // para que no se corte el texto
-        trailing: buttonLabel != null
-            ? ElevatedButton(
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (buttonLabel != null)
+              ElevatedButton(
                 onPressed: () => onPressed?.call(context, folio),
                 child: Text(buttonLabel),
-              )
-            : null,
+              ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: hasId
+                  ? () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AspiranteDetalleScreen(aspiranteId: aspiranteId),
+                        ),
+                      );
+                    }
+                  : null,
+              child: const Text('Ver Detalles'),
+            ),
+          ],
+        ),
       );
     },
   );

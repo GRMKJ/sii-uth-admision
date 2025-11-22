@@ -35,7 +35,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _submitting = true);
-    final scaffold = ScaffoldMessenger.of(context);
     try {
       final res = await ApiClient.postJson(
         '/auth/reset',
@@ -48,6 +47,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         },
       );
 
+      if (!mounted) return;
+      final scaffold = ScaffoldMessenger.of(context);
       if (res['success'] == true) {
         scaffold.showSnackBar(
           const SnackBar(content: Text('Contraseña restablecida. Inicia sesión.')),
@@ -59,6 +60,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
+      final scaffold = ScaffoldMessenger.of(context);
       scaffold.showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => _submitting = false);

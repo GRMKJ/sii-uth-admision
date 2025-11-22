@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:siiadmision/layout/header.dart';
-import 'package:siiadmision/layout/side_navigation.dart';
+import 'package:siiadmision/widgets/sidebar.dart';
 import 'package:go_router/go_router.dart';
 
 class PublicLayout extends StatelessWidget {

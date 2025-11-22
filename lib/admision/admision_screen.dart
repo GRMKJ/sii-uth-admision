@@ -269,10 +269,10 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
                           color: colors.surface,
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
-                            BoxShadow(
-                              color: colors.shadow.withOpacity(0.1),
-                              blurRadius: 12,
-                            ),
+                                      BoxShadow(
+                                        color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                        blurRadius: 12,
+                                      ),
                           ],
                         ),
                         child: isMobile
@@ -605,8 +605,8 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
   }
 
   Widget _sexoDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _sexo,
+      return DropdownButtonFormField<String>(
+        initialValue: _sexo,
       decoration: const InputDecoration(
         labelText: 'Sexo',
         prefixIcon: Icon(Icons.wc),
@@ -645,7 +645,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
 
 Widget _estadoDropdown() {
   return DropdownButtonFormField<String>(
-    value: _estadoNac,
+    initialValue: _estadoNac,
     isExpanded: true, // 👈 evita overflow en desktop/móvil
     decoration: const InputDecoration(
       labelText: 'Estado de nacimiento',

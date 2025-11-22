@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:siiadmision/layout/header.dart';
-import 'package:siiadmision/layout/side_navigation.dart';
+import 'package:siiadmision/widgets/sidebar.dart';
 import 'package:go_router/go_router.dart';
 
 class DashboardAlumnoScreen extends StatefulWidget {
@@ -11,7 +11,7 @@ class DashboardAlumnoScreen extends StatefulWidget {
 }
 
 class _DashboardAlumnoScreenState extends State<DashboardAlumnoScreen> {
-  int _selectedIndex = 0;
+  final int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +56,7 @@ class _DashboardAlumnoScreenState extends State<DashboardAlumnoScreen> {
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
-                                  color: colors.shadow.withOpacity(0.1),
+                                  color: colors.shadow.withAlpha((0.1 * 255).round()),
                                   blurRadius: 12,
                                 ),
                               ],

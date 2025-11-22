@@ -32,6 +32,8 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   url_launcher: ^6.0.20
   go_router:
   file_picker: ^10.3.7

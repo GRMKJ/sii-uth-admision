@@ -105,7 +105,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: colors.shadow.withOpacity(0.1),
+                                        color: colors.shadow.withAlpha((0.1 * 255).round()),
                                         blurRadius: 12,
                                       ),
                                     ],
@@ -295,7 +295,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -335,7 +335,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           const SizedBox(height: 8),
 
           DropdownButtonFormField<String>(
-            value: _selectedCarrera,
+            initialValue: _selectedCarrera,
             items: _carreras
                 .map(
                   (carrera) => DropdownMenuItem<String>(
@@ -410,8 +410,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
         },
       );
 
+      if (!mounted) return;
       _showConfirmationDialog();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error al registrar: $e")));
@@ -598,7 +600,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
-                        value: selectedEstado,
+                        initialValue: selectedEstado,
                         decoration: const InputDecoration(
                           labelText: "Estado",
                           prefixIcon: Icon(Icons.map),
@@ -618,7 +620,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String>(
-                        value: selectedMunicipio,
+                        initialValue: selectedMunicipio,
                         decoration: const InputDecoration(
                           labelText: "Municipio",
                           prefixIcon: Icon(Icons.location_city),
@@ -674,8 +676,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           "municipio": selectedMunicipio,
                         },
                       );
+                      if (!context.mounted) return;
                       Navigator.pop(context, nuevo["data"]);
                     } catch (e) {
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(
                         context,
                       ).showSnackBar(SnackBar(content: Text("Error: $e")));

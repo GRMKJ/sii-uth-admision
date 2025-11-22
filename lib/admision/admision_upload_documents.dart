@@ -46,6 +46,7 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
     _refreshStatuses();
   }
 
+
   @override
   void initState() {
     super.initState();
@@ -111,7 +112,7 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
                               borderRadius: BorderRadius.circular(24),
                               boxShadow: [
                                 BoxShadow(
-                                  color: colors.shadow.withOpacity(0.1),
+                                  color: colors.shadow.withAlpha((0.1 * 255).round()),
                                   blurRadius: 12,
                                 ),
                               ],
@@ -307,19 +308,13 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
 
 }
 
-class DocumentUploadForm extends StatelessWidget {
+class DocumentUploadForm extends StatefulWidget {
   final Map<String, bool> uploadedStatus;
   final Map<String, bool> verifyingStatus;
   final void Function(String) onUpload;
   final void Function(String, bool) onVerifying;
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  // Controlador para la referencia de pago de inscripción
-  final Map<String, TextEditingController> _textControllers = {
-    'Pago de Inscripción y Orden de Cobro': TextEditingController(),
-  };
-
-  DocumentUploadForm({
+  const DocumentUploadForm({
     super.key,
     required this.uploadedStatus,
     required this.verifyingStatus,
@@ -327,10 +322,22 @@ class DocumentUploadForm extends StatelessWidget {
     required this.onVerifying,
   });
 
+  @override
+  State<DocumentUploadForm> createState() => _DocumentUploadFormState();
+}
+
+class _DocumentUploadFormState extends State<DocumentUploadForm> {
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
+  // Controlador para la referencia de pago de inscripción
+  final Map<String, TextEditingController> _textControllers = {
+    'Pago de Inscripción y Orden de Cobro': TextEditingController(),
+  };
+
   Widget _uploadField(BuildContext context, String label, bool uploaded) {
     final statusText = uploaded ? 'Cargado' : 'Pendiente';
     final statusColor = uploaded ? Colors.green : Colors.orange;
-    final isVerifying = verifyingStatus[label] == true;
+    final isVerifying = widget.verifyingStatus[label] == true;
 
     // Caso especial: Pago de Inscripción y Orden de Cobro
     if (label == 'Pago de Inscripción y Orden de Cobro') {
@@ -362,7 +369,7 @@ class DocumentUploadForm extends StatelessWidget {
                   OutlinedButton(
                     onPressed: (isVerifying || uploaded)
                         ? null
-                        : () => _verifyInscripcion(context, label, refController.text.trim()),
+                        : () => _verifyInscripcion(label, refController.text.trim()),
                     child: const Text('Verificar'),
                   ),
                 ],
@@ -384,14 +391,14 @@ class DocumentUploadForm extends StatelessWidget {
             else if (uploaded)
               Chip(
                 label: const Text('Cargado'),
-                backgroundColor: Colors.green.withOpacity(0.2),
+                backgroundColor: Colors.green.withAlpha((0.2 * 255).round()),
                 labelStyle: const TextStyle(color: Colors.green),
                 side: const BorderSide(color: Colors.green),
               )
             else
               Chip(
                 label: const Text('Verificar'),
-                backgroundColor: Colors.blue.withOpacity(0.15),
+                backgroundColor: Colors.blue.withAlpha((0.15 * 255).round()),
                 labelStyle: const TextStyle(color: Colors.blue),
                 side: const BorderSide(color: Colors.blue),
               ),
@@ -410,8 +417,8 @@ class DocumentUploadForm extends StatelessWidget {
           ),
           Expanded(
             flex: 3,
-            child: OutlinedButton.icon(
-              onPressed: (isVerifying || uploaded) ? null : () => pickPdf(context, label),
+              child: OutlinedButton.icon(
+            onPressed: (isVerifying || uploaded) ? null : () => pickPdf(label),
               icon: const Icon(Icons.upload_file),
               label: const Text('Subir archivo PDF'),
             ),
@@ -431,7 +438,7 @@ class DocumentUploadForm extends StatelessWidget {
                 )
               : Chip(
                   label: Text(statusText),
-                  backgroundColor: statusColor.withOpacity(0.2),
+                  backgroundColor: statusColor.withAlpha((0.2 * 255).round()),
                   labelStyle: TextStyle(color: statusColor),
                   side: BorderSide(color: statusColor),
                 ),
@@ -440,17 +447,19 @@ class DocumentUploadForm extends StatelessWidget {
     );
   }
 
-  Future<void> _verifyInscripcion(BuildContext context, String label, String referencia) async {
+  Future<void> _verifyInscripcion(String label, String referencia) async {
     final scaffold = ScaffoldMessenger.of(context);
     if (referencia.isEmpty) {
+      if (!mounted) return;
       scaffold.showSnackBar(const SnackBar(content: Text('Ingresa la referencia para verificar')));
       return;
     }
 
     try {
-      onVerifying(label, true);
+      widget.onVerifying(label, true);
       final token = await _storage.read(key: 'auth_token');
       if (token == null || token.isEmpty) {
+        if (!mounted) return;
         scaffold.showSnackBar(const SnackBar(content: Text('No autenticado')));
         return;
       }
@@ -463,28 +472,31 @@ class DocumentUploadForm extends StatelessWidget {
       );
 
       if (res['success'] == true) {
-        onUpload(label);
+        widget.onUpload(label);
+        if (!mounted) return;
         scaffold.showSnackBar(const SnackBar(content: Text('Referencia verificada')));
       } else {
         final msg = (res['message'] ?? 'No verificado').toString();
+        if (!mounted) return;
         scaffold.showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
-      scaffold.showSnackBar(SnackBar(content: Text('Error al verificar: $e')));
+      if (mounted) scaffold.showSnackBar(SnackBar(content: Text('Error al verificar: $e')));
     } finally {
-      onVerifying(label, false);
+      widget.onVerifying(label, false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final docs = uploadedStatus.keys.toList();
+    final docs = widget.uploadedStatus.keys.toList();
     return Column(
-      children: docs.map((doc) => _uploadField(context, doc, uploadedStatus[doc]!)).toList(),
+      children: docs.map((doc) => _uploadField(context, doc, widget.uploadedStatus[doc]!)).toList(),
     );
   }
 
-    Future<void> pickPdf(BuildContext context, String documentName) async {
+  Future<void> pickPdf(String documentName) async {
+    final scaffold = ScaffoldMessenger.of(context);
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
@@ -501,29 +513,29 @@ class DocumentUploadForm extends StatelessWidget {
         return; // nothing to upload
       }
       // Subir el archivo al servidor y verificar
-      onVerifying(documentName, true);
+      widget.onVerifying(documentName, true);
       await uploadFile(
-        context,
+        scaffold,
         path: safePath,
         bytes: bytes,
         filename: filename,
         documentName: documentName,
       );
-      onVerifying(documentName, false);
+      widget.onVerifying(documentName, false);
     }
   }
 
   Future<void> uploadFile(
-    BuildContext context, {
+    ScaffoldMessengerState scaffold, {
     String? path,
     List<int>? bytes,
     required String filename,
     required String documentName,
   }) async {
-    final scaffold = ScaffoldMessenger.of(context);
     try {
       final token = await _storage.read(key: 'auth_token');
       if (token == null || token.isEmpty) {
+        if (!mounted) return;
         scaffold.showSnackBar(const SnackBar(content: Text('No autenticado')));
         return;
       }
@@ -559,7 +571,8 @@ class DocumentUploadForm extends StatelessWidget {
         });
 
         if (found) {
-          onUpload(documentName);
+          widget.onUpload(documentName);
+          if (!mounted) return;
           scaffold.showSnackBar(SnackBar(content: Text('"$documentName" subido y verificado')));
         } else {
           throw Exception('El servidor no refleja el archivo subido aún');
@@ -568,10 +581,9 @@ class DocumentUploadForm extends StatelessWidget {
         throw Exception('No se pudo verificar documentos');
       }
     } catch (e) {
-      scaffold.showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) scaffold.showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
-      onVerifying(documentName, false);
+      widget.onVerifying(documentName, false);
     }
-  }
-
+ }
 }

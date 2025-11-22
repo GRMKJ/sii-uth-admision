@@ -103,8 +103,8 @@ class _NavItem extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 color: selected
-                    ? colors.secondaryContainer.withOpacity(0.5)
-                    : Colors.transparent,
+                  ? colors.secondaryContainer.withAlpha((0.5 * 255).round())
+                  : Colors.transparent,
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(8),
@@ -262,6 +262,12 @@ class SideNavigationAdmin extends StatelessWidget {
             label: 'Aspirantes',
             selected: selectedIndex == 1,
             onTap: () => onDestinationSelected(1),
+          ),
+          _NavItem(
+            icon: Icons.account_balance,
+            label: 'Finanzas',
+            selected: selectedIndex == 2,
+            onTap: () => onDestinationSelected(2),
           ),
           _NavItem(
             icon: Icons.settings,

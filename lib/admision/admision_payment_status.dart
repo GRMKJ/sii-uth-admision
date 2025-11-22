@@ -54,9 +54,11 @@ class _PaymentStatusScreenState extends State<PaymentStatusScreen> {
         _isValidated = false;
         _folio = null;
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error al consultar folio: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error al consultar folio: $e")));
+      }
     }
   }
 
@@ -79,7 +81,7 @@ class _PaymentStatusScreenState extends State<PaymentStatusScreen> {
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: colors.shadow.withOpacity(0.1),
+                        color: colors.shadow.withAlpha((0.1 * 255).round()),
                         blurRadius: 12,
                       ),
                     ],

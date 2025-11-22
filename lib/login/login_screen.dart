@@ -43,10 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: colors.surface,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
-                          BoxShadow(
-                            color: colors.shadow.withOpacity(0.1),
-                            blurRadius: 12,
-                          ),
+                                  BoxShadow(
+                                    color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                    blurRadius: 12,
+                                  ),
                         ],
                       ),
                       child: screenWidth < 640
