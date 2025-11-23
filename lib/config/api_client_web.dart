@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  static const String baseUrl = 'http://127.0.0.1:8000/api/v1';
+  static const String baseUrl = 'https://uthbackdev.cardomomo.icu/api/v1';
 
   // Browser-friendly client (no dart:io)
   static final http.Client _secureClient = http.Client();

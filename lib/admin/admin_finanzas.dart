@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,7 @@ class AdminFinanzasScreen extends StatefulWidget {
 
 class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
   final storage = const FlutterSecureStorage();
+  final Random _random = Random.secure();
 
   bool _loadingConceptos = true;
   bool _loadingAspirantes = true;
@@ -38,6 +41,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(_applyFilters);
+    _referenciaController.text = _generateReferencia();
     _loadInitialData();
   }
 
@@ -99,68 +103,84 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final useRail = useNavigationRailLayout(context);
+
+    void handleNavigation(int index) {
+      switch (index) {
+        case 0:
+          context.go('/admin/inicio');
+          break;
+        case 1:
+          context.go('/admin/aspirantes');
+          break;
+        case 2:
+          break;
+        case 3:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Módulo no implementado todavía')),
+          );
+          break;
+        case 4:
+          context.go('/');
+          break;
+      }
+    }
+
+    final content = SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = constraints.maxWidth;
+          final contentWidth = screenWidth.clamp(320.0, 1400.0);
+
+          return Column(
+            children: [
+              UthHeader(maxWidth: contentWidth),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 420,
+                        child: _buildRegistroCard(colors),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildAspirantesCard(colors)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
 
     return Scaffold(
       backgroundColor: colors.surfaceContainerLowest,
-      body: Row(
-        children: [
-          SideNavigationAdmin(
-            selectedIndex: 2,
-            onDestinationSelected: (index) {
-              switch (index) {
-                case 0:
-                  context.go('/admin/inicio');
-                  break;
-                case 1:
-                  context.go('/admin/aspirantes');
-                  break;
-                case 2:
-                  break;
-                case 7:
-                  context.go('/');
-                  break;
-                default:
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Módulo no implementado todavía')),
-                  );
-              }
-            },
-          ),
-          Expanded(
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final screenWidth = constraints.maxWidth;
-                  final contentWidth = screenWidth.clamp(320.0, 1400.0);
-
-                  return Column(
-                    children: [
-                      UthHeader(maxWidth: contentWidth),
-                      const SizedBox(height: 16),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 420,
-                                child: _buildRegistroCard(colors),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(child: _buildAspirantesCard(colors)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: 2,
+              destinations: adminNavigationDestinations,
+              onDestinationSelected: handleNavigation,
             ),
-          ),
-        ],
-      ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigationAdmin(
+                    selectedIndex: 2,
+                    onDestinationSelected: handleNavigation,
+                  ),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
     );
   }
 
@@ -248,9 +268,16 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
               ),
               TextFormField(
                 controller: _referenciaController,
-                decoration: const InputDecoration(
-                  labelText: 'Referencia / folio interno (opcional)',
-                  prefixIcon: Icon(Icons.tag),
+                readOnly: true,
+                enableInteractiveSelection: false,
+                decoration: InputDecoration(
+                  labelText: 'Referencia (auto generada)',
+                  prefixIcon: const Icon(Icons.tag),
+                  suffixIcon: IconButton(
+                    tooltip: 'Generar nuevo código',
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _regenerarReferencia,
+                  ),
                 ),
               ),
               const Divider(height: 32),
@@ -441,6 +468,17 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     return '${aspirante['nombre'] ?? ''} ${aspirante['ap_paterno'] ?? ''} ${aspirante['ap_materno'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
+  void _regenerarReferencia() {
+    setState(() {
+      _referenciaController.text = _generateReferencia();
+    });
+  }
+
+  String _generateReferencia() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    return List.generate(15, (_) => chars[_random.nextInt(chars.length)]).join();
+  }
+
   double? _safeMonto(dynamic value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
@@ -525,7 +563,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
       _showSnackBar('Pago registrado correctamente');
       setState(() {
         _submitting = false;
-        _referenciaController.clear();
+        _referenciaController.text = _generateReferencia();
         _selectedAspirante = null;
         _metodoPago = 'Efectivo ventanilla';
         _fechaPago = DateTime.now();

@@ -1,5 +1,63 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+const double kNavigationRailBreakpoint = 900;
+
+bool useNavigationRailLayout(BuildContext context) {
+  return MediaQuery.of(context).size.width >= kNavigationRailBreakpoint;
+}
+
+class _NavItemData {
+  final IconData icon;
+  final String label;
+
+  const _NavItemData(this.icon, this.label);
+}
+
+const List<_NavItemData> _publicNavItems = [
+  _NavItemData(Icons.login, 'Inicio'),
+  _NavItemData(Icons.person_add_alt, 'Admisión'),
+  _NavItemData(Icons.exit_to_app, 'Portal'),
+  _NavItemData(Icons.settings, 'Ajustes'),
+];
+
+const List<_NavItemData> _alumnoNavItems = [
+  _NavItemData(Icons.home, 'Inicio'),
+  _NavItemData(Icons.upload_file, 'Trámites'),
+  _NavItemData(Icons.class_, 'Clases'),
+  _NavItemData(Icons.business_center, 'Estadías'),
+  _NavItemData(Icons.assignment, 'Encuestas'),
+  _NavItemData(Icons.credit_card, 'Becas'),
+  _NavItemData(Icons.settings, 'Ajustes'),
+  _NavItemData(Icons.logout, 'Salir'),
+];
+
+const List<_NavItemData> _adminNavItems = [
+  _NavItemData(Icons.home, 'Inicio'),
+  _NavItemData(Icons.rule_folder, 'Aspirantes'),
+  _NavItemData(Icons.account_balance, 'Finanzas'),
+  _NavItemData(Icons.settings, 'Ajustes'),
+  _NavItemData(Icons.logout, 'Salir'),
+];
+
+List<NavigationDestination> _buildNavigationDestinations(List<_NavItemData> items) {
+  return items
+      .map(
+        (item) => NavigationDestination(
+          icon: Icon(item.icon),
+          label: item.label,
+        ),
+      )
+      .toList();
+}
+
+final List<NavigationDestination> publicNavigationDestinations =
+  _buildNavigationDestinations(_publicNavItems);
+
+final List<NavigationDestination> alumnoNavigationDestinations =
+  _buildNavigationDestinations(_alumnoNavItems);
+
+final List<NavigationDestination> adminNavigationDestinations =
+  _buildNavigationDestinations(_adminNavItems);
 
 class SideNavigation extends StatelessWidget {
   final int selectedIndex;
@@ -13,118 +71,23 @@ class SideNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Container(
-      width: 80,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(
-          right: BorderSide(color: colors.outlineVariant),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Botón hamburguesa o menú
-          IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {},
-            tooltip: 'Menú',
-          ),
-
-          const SizedBox(height: 24),
-
-          // Opciones de navegación
-          _NavItem(
-            icon: Icons.login,
-            label: 'Iniciar\nSesión',
-            selected: selectedIndex == 0,
-            onTap: () => onDestinationSelected(0),
-          ),
-          _NavItem(
-            icon: Icons.person_add_alt,
-            label: 'Admisión\n2025',
-            selected: selectedIndex == 1,
-            onTap: () => onDestinationSelected(1),
-          ),
-          _NavItem(
-            icon: Icons.exit_to_app,
-            label: 'Regresar a\nUTH.edu.mx',
-            selected: selectedIndex == 2,
-            onTap: _launchUthWebsite, // Llama a la función
-          ),
-          _NavItem(
-            icon: Icons.settings,
-            label: 'Ajustes',
-            selected: selectedIndex == 3,
-            onTap: () => onDestinationSelected(3),
-          ),
-        ],
-      ),
-    );
-  }
-  void _launchUthWebsite() async {
-    const url = 'https://uth.edu.mx';
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      debugPrint('No se pudo abrir $url');
+    if (!useNavigationRailLayout(context)) {
+      return const SizedBox.shrink();
     }
-  }
-}
 
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(100),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: selected
-                  ? colors.secondaryContainer.withAlpha((0.5 * 255).round())
-                  : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(8),
-              child: Icon(
-                icon,
-                color: colors.onSurface,
-              ),
+    return NavigationRail(
+      minWidth: 80,
+      labelType: NavigationRailLabelType.all,
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onDestinationSelected,
+      destinations: _publicNavItems
+          .map(
+            (item) => NavigationRailDestination(
+              icon: Icon(item.icon),
+              label: Text(item.label),
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 11,
-                    color: colors.onSurface,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+          )
+          .toList(),
     );
   }
 }
@@ -142,77 +105,23 @@ class SideNavigationAlumno extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    if (!useNavigationRailLayout(context)) {
+      return const SizedBox.shrink();
+    }
 
-    return Container(
-      width: 80,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(
-          right: BorderSide(color: colors.outlineVariant),
-        ),
-      ),
-      child: Column(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {},
-            tooltip: 'Menú',
-          ),
-          const SizedBox(height: 24),
-
-          // 🔽 Menú para Alumno Logueado
-          _NavItem(
-            icon: Icons.home,
-            label: 'Inicio',
-            selected: selectedIndex == 0,
-            onTap: () => onDestinationSelected(0),
-          ),
-          _NavItem(
-            icon: Icons.upload_file,
-            label: 'Tramites y Servicios',
-            selected: selectedIndex == 1,
-            onTap: () => onDestinationSelected(1),
-          ),
-          _NavItem(
-            icon: Icons.class_,
-            label: 'Mis Clases',
-            selected: selectedIndex == 2,
-            onTap: () => onDestinationSelected(2),
-          ),
-          _NavItem(
-            icon: Icons.business_center,
-            label: 'Estadias',
-            selected: selectedIndex == 3,
-            onTap: () => onDestinationSelected(3),
-          ),
-          _NavItem(
-            icon: Icons.assignment,
-            label: 'Encuestas y Evaluaciones',
-            selected: selectedIndex == 4,
-            onTap: () => onDestinationSelected(4),
-          ),
-          _NavItem(
-            icon: Icons.credit_card,
-            label: 'Becas',
-            selected: selectedIndex == 5,
-            onTap: () => onDestinationSelected(5),
-          ),
-          _NavItem(
-            icon: Icons.settings,
-            label: 'Ajustes',
-            selected: selectedIndex == 6,
-            onTap: () => onDestinationSelected(6),
-          ),
-          _NavItem(
-            icon: Icons.logout,
-            label: 'Cerrar Sesión',
-            selected: selectedIndex == 7,
-            onTap: () => onDestinationSelected(7),
-          ),
-        ],
-      ),
+    return NavigationRail(
+      minWidth: 80,
+      labelType: NavigationRailLabelType.all,
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onDestinationSelected,
+      destinations: _alumnoNavItems
+          .map(
+            (item) => NavigationRailDestination(
+              icon: Icon(item.icon),
+              label: Text(item.label),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -230,59 +139,23 @@ class SideNavigationAdmin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    if (!useNavigationRailLayout(context)) {
+      return const SizedBox.shrink();
+    }
 
-    return Container(
-      width: 80,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(
-          right: BorderSide(color: colors.outlineVariant),
-        ),
-      ),
-      child: Column(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {},
-            tooltip: 'Menú',
-          ),
-          const SizedBox(height: 24),
-
-          // 🔽 Menú para Administrativos
-          _NavItem(
-            icon: Icons.home,
-            label: 'Inicio',
-            selected: selectedIndex == 0,
-            onTap: () => onDestinationSelected(0),
-          ),
-          _NavItem(
-            icon: Icons.rule_folder,
-            label: 'Aspirantes',
-            selected: selectedIndex == 1,
-            onTap: () => onDestinationSelected(1),
-          ),
-          _NavItem(
-            icon: Icons.account_balance,
-            label: 'Finanzas',
-            selected: selectedIndex == 2,
-            onTap: () => onDestinationSelected(2),
-          ),
-          _NavItem(
-            icon: Icons.settings,
-            label: 'Ajustes',
-            selected: selectedIndex == 6,
-            onTap: () => onDestinationSelected(6),
-          ),
-          _NavItem(
-            icon: Icons.logout,
-            label: 'Cerrar Sesión',
-            selected: selectedIndex == 7,
-            onTap: () => onDestinationSelected(7),
-          ),
-        ],
-      ),
+    return NavigationRail(
+      minWidth: 80,
+      labelType: NavigationRailLabelType.all,
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onDestinationSelected,
+      destinations: _adminNavItems
+          .map(
+            (item) => NavigationRailDestination(
+              icon: Icon(item.icon),
+              label: Text(item.label),
+            ),
+          )
+          .toList(),
     );
   }
 }

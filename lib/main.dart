@@ -10,6 +10,7 @@ import 'package:siiadmision/admision/admision_upload_documents.dart';
 import 'package:siiadmision/login/login_screen.dart';
 import 'package:siiadmision/login/forgot_password_screen.dart';
 import 'package:siiadmision/admision/admision_screen.dart';
+import 'package:siiadmision/admision/admision_bachillerato.dart';
 import 'package:siiadmision/admision/admision_payment_screen.dart';
 import 'package:siiadmision/admision/admision_payment_status.dart';
 import 'package:siiadmision/login/reset_password_screen.dart';
@@ -21,14 +22,18 @@ import 'package:siiadmision/admin/admin_inicio.dart';
 import 'package:siiadmision/admin/admin_aspirantes_detalles.dart';
 import 'package:siiadmision/admin/admin_finanzas.dart';
 import 'package:siiadmision/config/session.dart';
+import 'package:siiadmision/config/theme_controller.dart';
+import 'package:siiadmision/settings/settings_screen.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'config/platform_info.dart';
+import 'admision/models/bachillerato_form_data.dart';
 
 void main() async {
   setUrlStrategy(PathUrlStrategy());
   WidgetsFlutterBinding.ensureInitialized();
   await Session().load(); 
+  await themeController.loadThemeMode();
 
   // Only run jailbreak detection on real mobile platforms (Android/iOS).
   // The plugin is not implemented on web/desktop and will throw
@@ -52,7 +57,7 @@ void main() async {
     debugPrint('Skipping jailbreak detection: not running on Android/iOS. Platform version: ${PlatformInfo.version}');
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(themeController: themeController));
 }
 
 final GoRouter _router = GoRouter(
@@ -90,11 +95,21 @@ final GoRouter _router = GoRouter(
           builder: (context, state) => const ForgotPasswordScreen(),
         ),
         GoRoute(path: '/admision', builder: (_, __) => const AdmissionScreen()),
-        GoRoute(path: '/admision/pagoexamen', builder: (_, __) => const PaymentScreen()),
+        GoRoute(path: '/admision/bachillerato', builder: (_, __) => const BachilleratoScreen()),
+        GoRoute(
+          path: '/admision/pagoexamen',
+          builder: (_, state) {
+            final extra = state.extra;
+            return PaymentScreen(
+              formData: extra is BachilleratoFormData ? extra : null,
+            );
+          },
+        ),
         GoRoute(path: '/admision/pagoexamen/status', builder: (_, __) => const PaymentStatusScreen()),
         GoRoute(path: '/admision/documentos', builder: (_, __) => const DocumentosScreen()),
         GoRoute(path: '/admision/documentos/subida', builder: (_, __) => const UploadDocumentsScreen()),
         GoRoute(path: '/admision/documentos/estado', builder: (_, __) => const DocumentosStatusScreen()),
+        GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       ],
     ),
     GoRoute(
@@ -146,7 +161,9 @@ class _ResetRouteWrapper extends StatelessWidget {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ThemeController themeController;
+
+  const MyApp({super.key, required this.themeController});
 
   @override
   Widget build(BuildContext context) {
@@ -155,22 +172,28 @@ class MyApp extends StatelessWidget {
     final ThemeData lightTheme = materialTheme.light();
     final ThemeData darkTheme  = materialTheme.dark();
 
-    return MaterialApp.router(
-      routerConfig: _router, // si usas go_router
-      debugShowCheckedModeBanner: false,
-      title: 'SII Admisión',
-      theme: lightTheme,   
-      darkTheme: darkTheme,
-      locale: const Locale('es', 'MX'), // 👈 aquí configuras español
-      supportedLocales: const [
-        Locale('es', 'MX'),
-        Locale('en', 'US'),
-      ],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        return MaterialApp.router(
+          routerConfig: _router,
+          debugShowCheckedModeBanner: false,
+          title: 'SII Admisión',
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeMode: themeController.mode,
+          locale: const Locale('es', 'MX'),
+          supportedLocales: const [
+            Locale('es', 'MX'),
+            Locale('en', 'US'),
+          ],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+        );
+      },
     );
   }
 }
@@ -186,31 +209,52 @@ class ShellLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useRail = useNavigationRailLayout(context);
+
+    void handleNavigation(int index) {
+      switch (index) {
+        case 0:
+          context.go('/');
+          break;
+        case 1:
+          context.go('/admision');
+          break;
+        case 2:
+          context.go('/uth');
+          break;
+        case 3:
+          context.go('/settings');
+          break;
+      }
+    }
+
     return Scaffold(
-      body: Row(
-        children: [
-          SideNavigation(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: (index) {
-              switch (index) {
-                case 0:
-                  context.go('/');
-                  break;
-                case 1:
-                  context.go('/admision');
-                  break;
-                case 2:
-                  context.go('/uth');
-                  break;
-                case 3:
-                  context.go('/settings');
-                  break;
-              }
-            },
-          ),
-          Expanded(child: child),
-        ],
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          final hasRailSpace = constraints.maxWidth >= kNavigationRailBreakpoint;
+          return hasRailSpace
+              ? const SizedBox.shrink()
+              : NavigationBar(
+                  selectedIndex: selectedIndex,
+                  destinations: publicNavigationDestinations,
+                  onDestinationSelected: handleNavigation,
+                );
+        },
       ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigation(
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: handleNavigation,
+                  ),
+                ),
+                Expanded(child: child),
+              ],
+            )
+          : child,
     );
   }
 }

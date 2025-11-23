@@ -1,6 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
@@ -24,7 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
+
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -33,12 +34,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
             return Column(
               children: [
-                const SizedBox(height: 24),
                 Expanded(
                   child: Center(
                     child: Container(
                       width: contentWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: colors.surface,
                         borderRadius: BorderRadius.circular(16),
@@ -140,22 +139,38 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        TextField(
-          controller: _usernameController,
-          decoration: const InputDecoration(
-            labelText: 'Usuario',
-            prefixIcon: Icon(Icons.person_outline),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Contraseña',
-            prefixIcon: Icon(Icons.lock_outline),
-            border: OutlineInputBorder(),
+        AutofillGroup(
+          child: Column(
+            children: [
+              TextField(
+                controller: _usernameController,
+                textInputAction: TextInputAction.next,
+                keyboardType: TextInputType.emailAddress,
+                textCapitalization: TextCapitalization.none,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.username, AutofillHints.email],
+                onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                decoration: const InputDecoration(
+                  labelText: 'Usuario',
+                  prefixIcon: Icon(Icons.person_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.password],
+                onSubmitted: (_) => _submitLogin(context),
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña',
+                  prefixIcon: Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -175,99 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
               foregroundColor: colors.onPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
             ),
-            onPressed: () async {
-              final identity = _usernameController.text.trim();
-              final password = _passwordController.text;
-
-              if (identity.isEmpty || password.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Usuario y contraseña requeridos"),
-                  ),
-                );
-                return;
-              }
-
-              try {
-                final response = await ApiClient.postJson(
-                  "/auth/login",
-                  body: {"identity": identity, "password": password},
-                );
-
-                if (response["success"] != true) {
-                  throw Exception(response["message"] ?? "Error desconocido");
-                }
-
-                final data = response["data"] as Map<String, dynamic>;
-                final token = data["token"] as String;
-                final user = data["user"] as Map<String, dynamic>;
-                final role = user["role"] as String;
-
-                await storage.write(key: "auth_token", value: token);
-                await storage.write(key: "role", value: role);
-
-                await Session().load();
-                debugPrint("✅ Inicio de sesión exitoso para rol: $role");
-
-                switch (role) {
-                  case "aspirante":
-                    debugPrint("📌 Rol aspirante: buscando progreso...");
-                    final stepResponse = await ApiClient.getJson(
-                      "/aspirantes/progress",
-                      token: token,
-                    );
-
-                    if (stepResponse["success"] == true) {
-                      dynamic rawStep;
-                      if (stepResponse.containsKey('step')) {
-                        rawStep = stepResponse['step'];
-                      } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
-                        rawStep = (stepResponse['data'] as Map)['step'];
-                      }
-
-                      if (rawStep == null) {
-                        throw Exception('Respuesta inválida: step no encontrado');
-                      }
-
-                      int? step;
-                      if (rawStep is int) {
-                        step = rawStep;
-                      } else if (rawStep is String) {
-                        step = int.tryParse(rawStep);
-                      }
-
-                      if (step == null) {
-                        throw Exception('Valor de step inválido: $rawStep');
-                      }
-
-                      debugPrint("➡️ Progreso detectado: step $step");
-                      // Usa tu función para mandar al paso correcto
-                      handleLogin(context, step);
-                    } else {
-                      throw Exception("No se pudo obtener progreso");
-                    }
-                    break;
-
-                  case "alumno":
-                    debugPrint("➡️ Navegando a /alumno/inicio");
-                    context.go("/alumno/inicio");
-                    break;
-
-                  case "administrativo":
-                    debugPrint("➡️ Navegando a /admin/inicio");
-                    context.go("/admin/inicio");
-                    break;
-
-                  default:
-                    debugPrint("⚠️ Rol desconocido, navegando a /");
-                    context.go("/");
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error al iniciar sesión: $e")),
-                );
-              }
-            },
+            onPressed: () => _submitLogin(context),
             icon: const Icon(Icons.login),
             label: const Text(
               'Iniciar Sesión',
@@ -278,6 +201,93 @@ class _LoginScreenState extends State<LoginScreen> {
       ],
     );
   }
+
+  Future<void> _submitLogin(BuildContext context) async {
+    final identity = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (identity.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Usuario y contraseña requeridos"),
+        ),
+      );
+      return;
+    }
+
+    try {
+      TextInput.finishAutofillContext();
+      final response = await ApiClient.postJson(
+        "/auth/login",
+        body: {"identity": identity, "password": password},
+      );
+
+      if (response["success"] != true) {
+        throw Exception(response["message"] ?? "Error desconocido");
+      }
+
+      final data = response["data"] as Map<String, dynamic>;
+      final token = data["token"] as String;
+      final user = data["user"] as Map<String, dynamic>;
+      final role = user["role"] as String;
+
+      await storage.write(key: "auth_token", value: token);
+      await storage.write(key: "role", value: role);
+
+      await Session().load();
+
+      switch (role) {
+        case "aspirante":
+          final stepResponse = await ApiClient.getJson(
+            "/aspirantes/progress",
+            token: token,
+          );
+
+          if (stepResponse["success"] == true) {
+            dynamic rawStep;
+            if (stepResponse.containsKey('step')) {
+              rawStep = stepResponse['step'];
+            } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
+              rawStep = (stepResponse['data'] as Map)['step'];
+            }
+
+            if (rawStep == null) {
+              throw Exception('Respuesta inválida: step no encontrado');
+            }
+
+            int? step;
+            if (rawStep is int) {
+              step = rawStep;
+            } else if (rawStep is String) {
+              step = int.tryParse(rawStep);
+            }
+
+            if (step == null) {
+              throw Exception('Valor de step inválido: $rawStep');
+            }
+            handleLogin(context, step);
+          } else {
+            throw Exception("No se pudo obtener progreso");
+          }
+          break;
+
+        case "alumno":
+          context.go("/alumno/inicio");
+          break;
+
+        case "administrativo":
+          context.go("/admin/inicio");
+          break;
+
+        default:
+          context.go("/");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al iniciar sesión: $e")),
+      );
+    }
+  }
 }
 
 Future<void> handleLogin(BuildContext context, int step) async {
@@ -286,7 +296,7 @@ Future<void> handleLogin(BuildContext context, int step) async {
       context.go('/admision');
       break;
     case 2:
-      context.go('/admision/pagoexamen');
+      context.go('/admision/bachillerato');
       break;
     case 3:
       context.go('/admision/pagoexamen/status');

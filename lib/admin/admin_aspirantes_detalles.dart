@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 
 class ValidarPagoScreen extends StatelessWidget {
@@ -262,7 +263,6 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
                   'Carrera elegida',
                   [
                     _infoLine(context, 'Programa', carrera['carrera'] ?? 'N/D'),
-                    _infoLine(context, 'Duración', carrera['duracion'] ?? 'N/D'),
                     if ((carrera['descripcion'] ?? '').toString().isNotEmpty)
                       _infoLine(context, 'Descripción', carrera['descripcion']),
                   ],
@@ -362,17 +362,9 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
 
     final docList = documentos.map((doc) => Map<String, dynamic>.from(doc as Map)).toList();
     final rows = docList.map((docMap) {
-      final archivo = docMap['archivo_url'] ?? 'Sin archivo';
       return DataRow(cells: [
         DataCell(Text(docMap['nombre']?.toString() ?? 'Documento')),
         DataCell(Text(docMap['estado_validacion_texto']?.toString() ?? 'Pendiente')),
-        DataCell(SizedBox(
-          width: 220,
-          child: Text(
-            archivo.toString(),
-            overflow: TextOverflow.ellipsis,
-          ),
-        )),
         DataCell(Text(docMap['fecha_registro']?.toString() ?? 'N/D')),
         DataCell(
           TextButton.icon(
@@ -391,7 +383,6 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
           columns: const [
             DataColumn(label: Text('Nombre')),
             DataColumn(label: Text('Estado')),
-            DataColumn(label: Text('Archivo')),
             DataColumn(label: Text('Fecha registro')),
             DataColumn(label: Text('Acciones')),
           ],
@@ -531,19 +522,36 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
+        final archivoUrl = (doc['archivo_url'] ?? '').toString();
+        final hasArchivo = archivoUrl.isNotEmpty;
         return AlertDialog(
           title: Text(doc['nombre']?.toString() ?? 'Documento'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _infoLine(dialogContext, 'Estado', doc['estado_validacion_texto']?.toString() ?? 'Pendiente'),
-                _infoLine(dialogContext, 'Observaciones', doc['observaciones']?.toString() ?? 'Sin observaciones'),
-                _infoLine(dialogContext, 'Archivo', doc['archivo_url']?.toString() ?? 'Sin archivo'),
-                _infoLine(dialogContext, 'Fecha registro', doc['fecha_registro']?.toString() ?? 'N/D'),
-                _infoLine(dialogContext, 'Fecha validación', doc['fecha_validacion']?.toString() ?? 'N/D'),
-              ],
+          content: SizedBox(
+            width: 520,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _infoLine(dialogContext, 'Estado', doc['estado_validacion_texto']?.toString() ?? 'Pendiente'),
+                    _infoLine(dialogContext, 'Observaciones', doc['observaciones']?.toString() ?? 'Sin observaciones'),
+                    if (hasArchivo)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: FilledButton.icon(
+                          onPressed: () => _openExternalDocument(dialogContext, archivoUrl),
+                          icon: const Icon(Icons.open_in_new_outlined),
+                          label: const Text('Ver documento'),
+                        ),
+                      )
+                    else
+                      _infoLine(dialogContext, 'Archivo', 'Sin archivo'),
+                    _infoLine(dialogContext, 'Fecha registro', doc['fecha_registro']?.toString() ?? 'N/D'),
+                    _infoLine(dialogContext, 'Fecha validación', doc['fecha_validacion']?.toString() ?? 'N/D'),
+                  ],
+                ),
+              ),
             ),
           ),
           actions: [
@@ -564,23 +572,28 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: Text('Pago ${pago['referencia'] ?? ''}'.trim()),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _infoLine(dialogContext, 'Tipo', pago['tipo_pago']?.toString() ?? 'N/D'),
-                _infoLine(dialogContext, 'Método', pago['metodo_pago']?.toString() ?? 'N/D'),
-                _infoLine(dialogContext, 'Estado', pago['estado_validacion_texto']?.toString() ?? 'N/D'),
-                _infoLine(dialogContext, 'Fecha', pago['fecha_pago']?.toString() ?? 'N/D'),
-                _infoLine(dialogContext, 'Comprobante', pago['comprobante_url']?.toString() ?? 'Sin archivo'),
-                if (config != null)
-                  _infoLine(
-                    dialogContext,
-                    'Configuración',
-                    '${config['concepto'] ?? 'N/D'} - ${config['monto'] ?? ''}',
-                  ),
-              ],
+          content: SizedBox(
+            width: 520,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _infoLine(dialogContext, 'Tipo', pago['tipo_pago']?.toString() ?? 'N/D'),
+                    _infoLine(dialogContext, 'Método', pago['metodo_pago']?.toString() ?? 'N/D'),
+                    _infoLine(dialogContext, 'Estado', pago['estado_validacion_texto']?.toString() ?? 'N/D'),
+                    _infoLine(dialogContext, 'Fecha', pago['fecha_pago']?.toString() ?? 'N/D'),
+                    _infoLine(dialogContext, 'Comprobante', pago['comprobante_url']?.toString() ?? 'Sin archivo'),
+                    if (config != null)
+                      _infoLine(
+                        dialogContext,
+                        'Configuración',
+                        '${config['concepto'] ?? 'N/D'} - ${config['monto'] ?? ''}',
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
           actions: [
@@ -621,6 +634,23 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
         return 'No binario';
       default:
         return 'No determinado';
+    }
+  }
+
+  Future<void> _openExternalDocument(BuildContext context, String url) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('URL del documento no válida.')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el documento.')),
+      );
     }
   }
 }
