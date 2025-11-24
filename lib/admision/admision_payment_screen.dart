@@ -3,28 +3,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:siiadmision/admision/models/bachillerato_form_data.dart';
 import 'package:siiadmision/config/api_client.dart';
-import 'package:siiadmision/config/aspirante_progress.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key, this.formData});
-
   final BachilleratoFormData? formData;
-
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  final _referenceController = TextEditingController();
   final _storage = const FlutterSecureStorage();
-  bool _submitting = false;
-
-  @override
-  void dispose() {
-    _referenceController.dispose();
-    super.dispose();
-  }
-
+  bool _launchingStripe = false;
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -113,17 +103,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showHelpDialog,
-        tooltip: 'Ayuda',
-        child: const Icon(Icons.help_outline),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 16, right: 16),
+        child: FloatingActionButton(
+          onPressed: _showHelpDialog,
+          tooltip: 'Ayuda',
+          child: const Icon(Icons.help_outline),
+        ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 
   Widget _formContent(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final colors = Theme.of(context).colorScheme;
     final data = widget.formData;
     final selectionMissing = data == null;
 
@@ -136,34 +130,35 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Confirma tus datos y captura la referencia del depósito para completar el registro.',
+          'Confirma tus datos y elige cómo realizar tu pago. Puedes iniciar un cobro seguro con Stripe o acudir a ventanilla.',
           style: textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
         selectionMissing ? _missingSelectionCard(context) : _selectionSummaryCard(context, data),
         const SizedBox(height: 24),
-        _depositCard(context),
-        const SizedBox(height: 24),
-        TextField(
-          controller: _referenceController,
-          enabled: !selectionMissing && !_submitting,
-          decoration: const InputDecoration(
-            labelText: 'Referencia de Pago',
-            prefixIcon: Icon(Icons.confirmation_number),
-            border: OutlineInputBorder(),
-          ),
-        ),
+        _paymentOptions(context),
         const SizedBox(height: 24),
         Align(
           alignment: Alignment.bottomRight,
-          child: FilledButton(
-            onPressed: selectionMissing
-                ? () => context.go('/admision/bachillerato')
-                : (_submitting ? null : _submitForm),
-            child: Text(selectionMissing
-                ? 'Capturar datos previos'
-                : (_submitting ? 'Guardando…' : 'Siguiente')),
-          ),
+          child: selectionMissing
+              ? FilledButton(
+                  onPressed: () => context.go('/admision/bachillerato'),
+                  child: const Text('Capturar datos previos'),
+                )
+              : FilledButton.icon(
+                  onPressed: _launchingStripe ? null : _startStripePayment,
+                  icon: _launchingStripe
+                      ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.onPrimary,
+                        ),
+                      )
+                    : const Icon(Icons.credit_card),
+                  label: Text(_launchingStripe ? 'Conectando…' : 'Pagar en Stripe (3.6 %)'),
+                ),
         ),
       ],
     );
@@ -232,83 +227,157 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _depositCard(BuildContext context) {
+  Widget _paymentOptions(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      color: colors.surfaceContainerHighest,
-      child: const Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: colors.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.account_balance, size: 28),
-                SizedBox(width: 8),
+                Row(
+                  children: [
+                    Icon(Icons.credit_card, size: 28, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Opción 1: Pago en línea (Stripe)",
+                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20, thickness: 1),
+                const Text("Paga con tarjeta de crédito o débito mediante Stripe."),
+                const SizedBox(height: 8),
                 Text(
-                  'Datos de Depósito',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  "Stripe aplica una comisión del 3.6 % sobre el monto de \$500.00, la cual se suma automáticamente antes de confirmar tu pago.",
+                  style: textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Después de completar el pago recibirás tu comprobante digital y podrás continuar con el registro sin acudir a la universidad.",
+                  style: textTheme.bodySmall,
                 ),
               ],
             ),
-            Divider(height: 20, thickness: 1),
-            Text('Banco: SANTANDER'),
-            Text('Nombre: UNIVERSIDAD TECNOLÓGICA DE HUEJOTZINGO'),
-            Text('Número de Cuenta: 6551 0840 686'),
-            Text('CLABE: 0146 5065 5108 4068 63'),
-            Text('Cantidad: 500.00'),
-            SizedBox(height: 8),
-            Text(
-              'NOTA: Verifique y realice correctamente su pago ya que no aplica devolución o reembolso por cualquier motivo.',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.storefront, size: 28, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Opción 2: Pago en ventanilla",
+                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20, thickness: 1),
+                const Text(
+                  "Acude a la caja del edificio A de la Universidad Tecnológica de Huejotzingo para cubrir la cuota de \$500.00.",
+                ),
+                const SizedBox(height: 8),
+                const Text("Lleva tu identificación y solicita registrar tu pago del examen de admisión."),
+                const SizedBox(height: 8),
+                const Text('Conserva tu comprobante sellado para seguimiento y validación en el sistema.'),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Future<void> _submitForm() async {
+  Future<void> _startStripePayment() async {
     final data = widget.formData;
     if (data == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Completa primero tus datos de bachillerato.')),
       );
+      context.go('/admision/bachillerato');
       return;
     }
 
-    if (_referenceController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa la referencia de pago.')),
-      );
-      return;
-    }
-
-    setState(() => _submitting = true);
+    setState(() => _launchingStripe = true);
     try {
       final token = await _storage.read(key: 'auth_token');
-      await ApiClient.postJson(
-        '/aspirantes/pago',
+      final response = await ApiClient.postJson(
+        '/pagos/stripe/session',
         token: token,
         body: {
           'bachillerato_id': data.bachilleratoId,
           'promedio': data.promedio,
           'carrera_id': data.carreraId,
-          'referencia': _referenceController.text.trim(),
         },
       );
+      final checkoutUrl = _extractCheckoutUrl(response);
+      if (checkoutUrl == null) {
+        throw Exception('No se recibió el enlace de Stripe.');
+      }
+      final launched = await launchUrlString(
+        checkoutUrl,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        throw Exception('No se pudo abrir la ventana de pago.');
+      }
       if (!mounted) return;
-      _showConfirmationDialog();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stripe se abrió en otra ventana. Completa el pago y regresa para consultar el estado.'),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al registrar: $e')),
+        SnackBar(content: Text('No se pudo iniciar el pago: $e')),
       );
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) setState(() => _launchingStripe = false);
     }
+  }
+
+  String? _extractCheckoutUrl(Map<String, dynamic> payload) {
+    final candidates = <String?>[
+      payload['url'] as String?,
+      payload['checkout_url'] as String?,
+      payload['redirect_url'] as String?,
+      payload['checkoutUrl'] as String?,
+    ];
+    final data = payload['data'];
+    if (data is Map<String, dynamic>) {
+      candidates.addAll([
+        data['url'] as String?,
+        data['checkout_url'] as String?,
+        data['redirect_url'] as String?,
+        data['checkoutUrl'] as String?,
+      ]);
+    }
+    for (final candidate in candidates) {
+      if (candidate != null && candidate.isNotEmpty) {
+        return candidate;
+      }
+    }
+    return null;
   }
 
   void _showHelpDialog() {
@@ -352,74 +421,5 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  void _showConfirmationDialog() {
-    bool accepted = false;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              contentPadding: const EdgeInsets.all(24),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.receipt_long_rounded, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Confirmación de Pago',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Como confirmación de este paso, 5 días hábiles posteriores debes recibir\ncorreo electrónico de confirmación de pre registro con\nla instrucción para registro al examen de admisión.\n\nDe lo contrario, comunícate a:',
-                    textAlign: TextAlign.justify,
-                  ),
-                  const SizedBox(height: 8),
-                  const SelectableText('aspirante@uth.edu.mx'),
-                  const Text('Tels. 227 275 9311'),
-                  const Text('Tels. 227 275 9313'),
-                  const SizedBox(height: 16),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Acepto que los datos proporcionados son correctos',
-                    ),
-                    value: accepted,
-                    onChanged: (val) => setState(() => accepted = val ?? false),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: accepted
-                      ? () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Registro confirmado'),
-                            ),
-                          );
-                          ProgressService.saveStep(3);
-                          context.push('/admision/pagoexamen/status');
-                        }
-                      : null,
-                  child: const Text('Acepto'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
 }

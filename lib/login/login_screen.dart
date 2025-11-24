@@ -299,15 +299,18 @@ Future<void> handleLogin(BuildContext context, int step) async {
       context.go('/admision/bachillerato');
       break;
     case 3:
-      context.go('/admision/pagoexamen/status');
+      context.go('/admision/pagoexamen');
       break;
     case 4:
-      context.go('/admision/documentos/subida');
+      context.go('/admision/pagoexamen/status');
       break;
     case 5:
-      context.go('/admision/documentos/estado');
+      context.go('/admision/documentos/subida');
       break;
     case 6:
+      context.go('/admision/documentos/estado');
+      break;
+    case 7:
       context.go('/alumno/inicio');
       break;
     default:

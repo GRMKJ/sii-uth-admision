@@ -131,6 +131,41 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
           final contentWidth = screenWidth.clamp(320.0, 1400.0);
+          final isWideLayout = contentWidth >= 1000;
+          final horizontalPadding = screenWidth < 720 ? 16.0 : 24.0;
+
+          Widget buildBody() {
+            if (isWideLayout) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: min(420.0, contentWidth),
+                    child: _buildRegistroCard(colors),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(child: _buildAspirantesCard(colors)),
+                ],
+              );
+            }
+
+            final minListHeight = max(420.0, MediaQuery.of(context).size.height * 0.5);
+
+            return SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildRegistroCard(colors, compact: true),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    height: minListHeight,
+                    child: _buildAspirantesCard(colors),
+                  ),
+                ],
+              ),
+            );
+          }
 
           return Column(
             children: [
@@ -138,17 +173,13 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
               const SizedBox(height: 16),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 420,
-                        child: _buildRegistroCard(colors),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildAspirantesCard(colors)),
-                    ],
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 12),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: contentWidth),
+                      child: buildBody(),
+                    ),
                   ),
                 ),
               ),
@@ -184,8 +215,9 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     );
   }
 
-  Widget _buildRegistroCard(ColorScheme colors) {
+  Widget _buildRegistroCard(ColorScheme colors, {bool compact = false}) {
     final monto = _selectedConcepto != null ? _safeMonto(_selectedConcepto!['monto']) : null;
+    final bottomSpacer = compact ? const SizedBox(height: 16) : const Spacer();
 
     return Card(
       child: Padding(
@@ -249,8 +281,6 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
                   dropdownMenuEntries: const [
                     DropdownMenuEntry(value: 'Efectivo ventanilla', label: 'Efectivo ventanilla'),
                     DropdownMenuEntry(value: 'Tarjeta ventanilla', label: 'Tarjeta ventanilla'),
-                    DropdownMenuEntry(value: 'Transferencia', label: 'Transferencia'),
-                    DropdownMenuEntry(value: 'Otro', label: 'Otro'),
                   ],
                   onSelected: (value) => setState(() => _metodoPago = value ?? 'Efectivo ventanilla'),
                 ),
@@ -282,11 +312,11 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
               ),
               const Divider(height: 32),
               _buildAspiranteResumen(),
-              const Spacer(),
+              bottomSpacer,
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: _canSubmit ? _submitPago : null,
+                  onPressed: _canSubmit ? _handleSubmitTap : null,
                   icon: _submitting
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.payments_outlined),
@@ -312,7 +342,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     }
 
     final nombre = _nombreAspirante(_selectedAspirante!);
-    final folio = _selectedAspirante!['folio_examen'] ?? 'N/D';
+    final curp = _curpAspirante(_selectedAspirante!);
     final step = _stepLabel(_selectedAspirante!['progress_step']);
 
     return Container(
@@ -328,7 +358,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
           Text('Aspirante seleccionado', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           Text(nombre),
-          Text('Folio: $folio · Paso: $step'),
+          Text('CURP: $curp · Paso: $step'),
         ],
       ),
     );
@@ -423,14 +453,12 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
       itemBuilder: (context, index) {
         final aspirante = _filteredAspirantes[index];
         final isSelected = _selectedAspirante != null && _selectedAspirante!['id_aspirantes'] == aspirante['id_aspirantes'];
-        final pagos = aspirante['pagos'] as List<dynamic>? ?? [];
-        final tienePago = pagos.isNotEmpty;
-        final folio = aspirante['folio_examen'] ?? 'N/D';
+        final curp = _curpAspirante(aspirante);
 
         return ListTile(
           selected: isSelected,
           title: Text(_nombreAspirante(aspirante)),
-          subtitle: Text('Folio: $folio · Paso ${aspirante['progress_step'] ?? '-'} · ${tienePago ? 'Con pago previo' : 'Sin pagos registrados'}'),
+          subtitle: Text('CURP: $curp · Paso ${aspirante['progress_step'] ?? '-'} · '),
           trailing: FilledButton.tonal(
             onPressed: () {
               setState(() => _selectedAspirante = aspirante);
@@ -466,6 +494,11 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
 
   String _nombreAspirante(Map<String, dynamic> aspirante) {
     return '${aspirante['nombre'] ?? ''} ${aspirante['ap_paterno'] ?? ''} ${aspirante['ap_materno'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _curpAspirante(Map<String, dynamic> aspirante) {
+    final curp = aspirante['curp']?.toString().trim() ?? '';
+    return curp.isEmpty ? 'N/D' : curp;
   }
 
   void _regenerarReferencia() {
@@ -538,6 +571,14 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
 
   bool get _canSubmit => !_submitting && _selectedConcepto != null && _selectedAspirante != null;
 
+  Future<void> _handleSubmitTap() async {
+    if (!_canSubmit) return;
+    final confirmed = await _showConfirmationDialog();
+    if (confirmed == true) {
+      await _submitPago();
+    }
+  }
+
   Future<void> _submitPago() async {
     if (!_canSubmit) return;
     setState(() => _submitting = true);
@@ -575,6 +616,76 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
         _showSnackBar('No se pudo registrar el pago: $e', isError: true);
       }
     }
+  }
+
+  Future<bool?> _showConfirmationDialog() {
+    final aspirante = _selectedAspirante;
+    final concepto = _selectedConcepto;
+    final nombre = aspirante != null ? _nombreAspirante(aspirante) : 'Sin aspirante';
+    final curp = aspirante != null ? _curpAspirante(aspirante) : 'N/D';
+    final conceptoLabel = concepto?['concepto']?.toString() ?? 'Sin concepto';
+    final monto = concepto != null ? _safeMonto(concepto['monto']) : null;
+    final montoLabel = monto != null ? _formatCurrency(monto) : 'N/D';
+    final metodo = _metodoPago;
+    final fecha = _formatDate(_fechaPago);
+    final referencia = _referenciaController.text.trim().isEmpty ? 'N/D' : _referenciaController.text.trim();
+
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Confirmar registro de pago'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildConfirmationRow(dialogContext, 'Aspirante', nombre),
+                _buildConfirmationRow(dialogContext, 'CURP', curp),
+                const SizedBox(height: 12),
+                _buildConfirmationRow(dialogContext, 'Concepto', conceptoLabel),
+                _buildConfirmationRow(dialogContext, 'Monto', montoLabel),
+                _buildConfirmationRow(dialogContext, 'Método de pago', metodo),
+                _buildConfirmationRow(dialogContext, 'Fecha del pago', fecha),
+                _buildConfirmationRow(dialogContext, 'Referencia', referencia),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Confirmar y registrar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildConfirmationRow(BuildContext context, String label, String value) {
+    final labelStyle = Theme.of(context).textTheme.labelMedium;
+    final valueStyle = Theme.of(context).textTheme.bodyMedium;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 4,
+            child: Text(label, style: labelStyle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 6,
+            child: Text(value, style: valueStyle),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackBar(String message, {bool isError = false}) {

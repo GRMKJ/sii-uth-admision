@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/aspirante_progress.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UploadDocumentsScreen extends StatefulWidget {
   const UploadDocumentsScreen({super.key});
@@ -89,119 +90,150 @@ class _UploadDocumentsScreenState extends State<UploadDocumentsScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
-      body: Row(
-        children: [
-          Expanded(
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final screenWidth = constraints.maxWidth;
-                  final contentWidth = screenWidth.clamp(320.0, 1000.0);
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final screenWidth = constraints.maxWidth;
+            final contentWidth = screenWidth.clamp(320.0, 1280.0);
+            final isMobile = screenWidth < 720;
 
-                  return Column(
-                    children: [
-                      const SizedBox(height: 24),
-                      Expanded(
-                        child: Center(
-                          child: Container(
-                            width: contentWidth,
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: colors.surface,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colors.shadow.withAlpha((0.1 * 255).round()),
-                                  blurRadius: 12,
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 1,
-                                  child: ClipRRect(
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(24),
-                                      bottomLeft: Radius.circular(24),
-                                    ),
-                                    child: Image.asset(
-                                      'assets/uth_fondo2.jpg',
-                                      fit: BoxFit.cover,
-                                      height: double.infinity,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(24),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Admisión 2025',
-                                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        const Text(
-                                          'Sube los documentos solicitados para completar tu inscripción:',
-                                          style: TextStyle(fontSize: 16),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Expanded(
-                                          child: SingleChildScrollView(
-                                            child: DocumentUploadForm(
-                                              uploadedStatus: _uploadedStatus,
-                                              verifyingStatus: _verifyingStatus,
-                                              onUpload: _uploadDocument,
-                                              onVerifying: (label, v) {
-                                                setState(() {
-                                                  _verifyingStatus[label] = v;
-                                                });
-                                              },
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: FilledButton(
-                                            onPressed: _allUploaded ? _showConfirmationDialog : null,
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text('Siguiente'),
-                                                Icon(Icons.arrow_right),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  );
+            final card = Container(
+              width: contentWidth,
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.shadow.withAlpha((0.1 * 255).round()),
+                    blurRadius: 12,
+                  ),
+                ],
+              ),
+              child: isMobile
+                  ? _buildColumnLayout(context)
+                  : _buildRowLayout(context),
+            );
+
+            return Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0),
+                      child: card,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            );
+          },
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 16, right: 16),
+        child: FloatingActionButton(
+          onPressed: () => _showHelpDialog(context),
+          tooltip: 'Ayuda',
+          child: const Icon(Icons.help_outline),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRowLayout(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 1,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              bottomLeft: Radius.circular(24),
+            ),
+            child: Image.asset(
+              'assets/uth_fondo2.jpg',
+              fit: BoxFit.cover,
+              height: double.infinity,
+            ),
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: _buildInfoPanel(context),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildColumnLayout(BuildContext context) {
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          child: Image.asset(
+            'assets/uth_fondo2.jpg',
+            fit: BoxFit.cover,
+            height: 180,
+            width: double.infinity,
+          ),
+        ),
+        Expanded(child: _buildInfoPanel(context)),
+      ],
+    );
+  }
+
+  Widget _buildInfoPanel(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Admisión 2025',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Sube los documentos solicitados para completar tu inscripción:',
+            style: TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: SingleChildScrollView(
+              child: DocumentUploadForm(
+                uploadedStatus: _uploadedStatus,
+                verifyingStatus: _verifyingStatus,
+                onUpload: _uploadDocument,
+                onVerifying: (label, value) {
+                  setState(() {
+                    _verifyingStatus[label] = value;
+                  });
                 },
               ),
             ),
           ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: _allUploaded ? _showConfirmationDialog : null,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Siguiente'),
+                  Icon(Icons.arrow_right),
+                ],
+              ),
+            ),
+          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showHelpDialog(context),
-        tooltip: 'Ayuda',
-        child: const Icon(Icons.help_outline),
       ),
     );
   }
@@ -328,20 +360,89 @@ class DocumentUploadForm extends StatefulWidget {
 
 class _DocumentUploadFormState extends State<DocumentUploadForm> {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  static final Uri _seguroPaymentUri = Uri.parse('https://pagos.uth.edu.mx/seguro-credencial');
 
   // Controlador para la referencia de pago de inscripción
   final Map<String, TextEditingController> _textControllers = {
     'Pago de Inscripción y Orden de Cobro': TextEditingController(),
   };
 
-  Widget _uploadField(BuildContext context, String label, bool uploaded) {
+  Widget _uploadField(BuildContext context, String label, bool uploaded, bool isCompact) {
     final statusText = uploaded ? 'Cargado' : 'Pendiente';
     final statusColor = uploaded ? Colors.green : Colors.orange;
     final isVerifying = widget.verifyingStatus[label] == true;
 
-    // Caso especial: Pago de Inscripción y Orden de Cobro
     if (label == 'Pago de Inscripción y Orden de Cobro') {
       final refController = _textControllers[label]!;
+
+      final Widget statusChip = isVerifying
+          ? Chip(
+              avatar: SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+                ),
+              ),
+              label: const Text('Verificando...'),
+            )
+          : uploaded
+              ? Chip(
+                  label: const Text('Cargado'),
+                  backgroundColor: Colors.green.withAlpha((0.2 * 255).round()),
+                  labelStyle: const TextStyle(color: Colors.green),
+                  side: const BorderSide(color: Colors.green),
+                )
+              : Chip(
+                  label: const Text('Pendiente'),
+                  backgroundColor: Colors.orange.withAlpha((0.15 * 255).round()),
+                  labelStyle: const TextStyle(color: Colors.orange),
+                  side: const BorderSide(color: Colors.orange),
+                );
+
+      if (isCompact) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: refController,
+                decoration: const InputDecoration(
+                  hintText: 'Referencia / Folio',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: (isVerifying || uploaded)
+                      ? null
+                      : () => _verifyInscripcion(label, refController.text.trim()),
+                  child: const Text('Verificar'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Estado de validación:', textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  statusChip,
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Row(
@@ -376,31 +477,139 @@ class _DocumentUploadFormState extends State<DocumentUploadForm> {
               ),
             ),
             const SizedBox(width: 8),
-            if (isVerifying)
-              Chip(
-                avatar: SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
-                  ),
-                ),
-                label: const Text('Verificando...'),
-              )
-            else if (uploaded)
-              Chip(
-                label: const Text('Cargado'),
-                backgroundColor: Colors.green.withAlpha((0.2 * 255).round()),
-                labelStyle: const TextStyle(color: Colors.green),
-                side: const BorderSide(color: Colors.green),
-              )
-            else
-              Chip(
-                label: const Text('Verificar'),
-                backgroundColor: Colors.blue.withAlpha((0.15 * 255).round()),
-                labelStyle: const TextStyle(color: Colors.blue),
-                side: const BorderSide(color: Colors.blue),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Estado de validación:', textAlign: TextAlign.center),
+                const SizedBox(height: 4),
+                statusChip,
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (label == 'Pago de Seguro y Credencial') {
+      final Color statusColor = uploaded ? Colors.green : Colors.orange;
+      final Widget statusChip = Chip(
+        label: Text(uploaded ? 'Validado' : 'Pendiente'),
+        backgroundColor: statusColor.withAlpha((0.2 * 255).round()),
+        labelStyle: TextStyle(color: statusColor),
+        side: BorderSide(color: statusColor),
+      );
+
+      final Widget info = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Realiza tu pago en línea o directamente en la caja del edificio "A".'),
+          const SizedBox(height: 6),
+          const Text('En cuanto registremos el pago este requisito quedará validado automáticamente.'),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _openSeguroPayment,
+            icon: const Icon(Icons.payment),
+            label: const Text('Pagar en línea'),
+          ),
+        ],
+      );
+
+      if (isCompact) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              info,
+              const SizedBox(height: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Estado de validación:', textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  statusChip,
+                ],
+              ),
+            ],
+          ),
+        );
+      }
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            Expanded(
+              flex: 4,
+              child: info,
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Estado de validación:', textAlign: TextAlign.center),
+                const SizedBox(height: 4),
+                statusChip,
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    final Widget statusChip = isVerifying
+        ? Chip(
+            avatar: SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
+              ),
+            ),
+            label: const Text('Verificando...'),
+          )
+        : Chip(
+            label: Text(statusText),
+            backgroundColor: statusColor.withAlpha((0.2 * 255).round()),
+            labelStyle: TextStyle(color: statusColor),
+            side: BorderSide(color: statusColor),
+          );
+
+    final uploadButton = OutlinedButton.icon(
+      onPressed: (isVerifying || uploaded) ? null : () => pickPdf(label),
+      icon: const Icon(Icons.upload_file),
+      label: const Text('Subir archivo PDF'),
+    );
+
+    if (isCompact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            SizedBox(width: double.infinity, child: uploadButton),
+              const SizedBox(height: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Estado de validación:', textAlign: TextAlign.center),
+                  const SizedBox(height: 4),
+                  statusChip,
+                ],
               ),
           ],
         ),
@@ -417,31 +626,18 @@ class _DocumentUploadFormState extends State<DocumentUploadForm> {
           ),
           Expanded(
             flex: 3,
-              child: OutlinedButton.icon(
-            onPressed: (isVerifying || uploaded) ? null : () => pickPdf(label),
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Subir archivo PDF'),
-            ),
+            child: uploadButton,
           ),
           const SizedBox(width: 8),
-          isVerifying
-              ? Chip(
-                  avatar: SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Theme.of(context).colorScheme.primary),
-                    ),
-                  ),
-                  label: const Text('Verificando...'),
-                )
-              : Chip(
-                  label: Text(statusText),
-                  backgroundColor: statusColor.withAlpha((0.2 * 255).round()),
-                  labelStyle: TextStyle(color: statusColor),
-                  side: BorderSide(color: statusColor),
-                ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Estado de validación:', textAlign: TextAlign.center),
+              const SizedBox(height: 4),
+              statusChip,
+            ],
+          ),
         ],
       ),
     );
@@ -490,8 +686,22 @@ class _DocumentUploadFormState extends State<DocumentUploadForm> {
   @override
   Widget build(BuildContext context) {
     final docs = widget.uploadedStatus.keys.toList();
-    return Column(
-      children: docs.map((doc) => _uploadField(context, doc, widget.uploadedStatus[doc]!)).toList(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 640;
+        return Column(
+          children: docs
+              .map(
+                (doc) => _uploadField(
+                  context,
+                  doc,
+                  widget.uploadedStatus[doc]!,
+                  isCompact,
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 
@@ -586,4 +796,19 @@ class _DocumentUploadFormState extends State<DocumentUploadForm> {
       widget.onVerifying(documentName, false);
     }
  }
+
+  Future<void> _openSeguroPayment() async {
+    final scaffold = ScaffoldMessenger.of(context);
+    try {
+      final launched = await launchUrl(
+        _seguroPaymentUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        scaffold.showSnackBar(const SnackBar(content: Text('No se pudo abrir el portal de pago. Intenta más tarde.')));
+      }
+    } catch (_) {
+      scaffold.showSnackBar(const SnackBar(content: Text('No se pudo abrir el portal de pago. Intenta más tarde.')));
+    }
+  }
 }

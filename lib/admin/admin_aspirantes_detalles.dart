@@ -524,6 +524,9 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
       builder: (dialogContext) {
         final archivoUrl = (doc['archivo_url'] ?? '').toString();
         final hasArchivo = archivoUrl.isNotEmpty;
+        final estadoLabel = doc['estado_validacion_texto']?.toString() ?? 'Pendiente';
+        final validatorName = _documentValidatorName(doc);
+        final ocrNotes = _extractOcrObservations(doc);
         return AlertDialog(
           title: Text(doc['nombre']?.toString() ?? 'Documento'),
           content: SizedBox(
@@ -534,8 +537,10 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _infoLine(dialogContext, 'Estado', doc['estado_validacion_texto']?.toString() ?? 'Pendiente'),
-                    _infoLine(dialogContext, 'Observaciones', doc['observaciones']?.toString() ?? 'Sin observaciones'),
+                    _buildStatusBadge(dialogContext, estadoLabel),
+                    const SizedBox(height: 12),
+                    _infoLine(dialogContext, 'Validado por', validatorName),
+                    _infoLine(dialogContext, 'Observaciones (OCR)', ocrNotes),
                     if (hasArchivo)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -605,6 +610,95 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
         );
       },
     );
+  }
+
+  Widget _buildStatusBadge(BuildContext context, String estado) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = _statusColorForLabel(estado, scheme);
+    final textStyle = Theme.of(context).textTheme.labelLarge?.copyWith(color: color);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(estado, style: textStyle),
+        ],
+      ),
+    );
+  }
+
+  String _documentValidatorName(Map<String, dynamic> doc) {
+    final validador = doc['validador'];
+    if (validador is Map<String, dynamic>) {
+      final formatted = [
+        validador['nombre'],
+        validador['ap_paterno'],
+        validador['ap_materno'],
+      ].whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).join(' ');
+      if (formatted.isNotEmpty) {
+        return formatted;
+      }
+    }
+
+    final origen = doc['validacion_origen']?.toString();
+    if (origen != null && origen.trim().isNotEmpty) {
+      return origen.trim();
+    }
+
+    final estado = (doc['estado_validacion_texto']?.toString() ?? '').toLowerCase();
+    if (estado.contains('autom')) {
+      return 'Agente automatizado';
+    }
+    if (estado.contains('pendiente')) {
+      return 'Pendiente de validación';
+    }
+    return 'Sin registro';
+  }
+
+  String _extractOcrObservations(Map<String, dynamic> doc) {
+    const candidateKeys = [
+      'ocr_observaciones',
+      'ocr_resultado',
+      'ocr_texto',
+      'ocr_data',
+      'ocr',
+      'observaciones',
+    ];
+
+    for (final key in candidateKeys) {
+      final value = doc[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty) {
+        return text;
+      }
+    }
+    return 'Sin datos capturados por OCR.';
+  }
+
+  Color _statusColorForLabel(String estado, ColorScheme scheme) {
+    final normalized = estado.toLowerCase();
+    if (normalized.contains('autom')) {
+      return scheme.tertiary;
+    }
+    if (normalized.contains('pendiente')) {
+      return scheme.secondary;
+    }
+    if (normalized.contains('manual')) {
+      return scheme.primary;
+    }
+    return scheme.outline;
   }
 
   String? _placeholderAssetForGender(String genero) {

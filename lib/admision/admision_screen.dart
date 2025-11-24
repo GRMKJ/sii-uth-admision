@@ -445,10 +445,14 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showHelpDialog,
-        tooltip: 'Ayuda',
-        child: const Icon(Icons.help_outline),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 16, right: 16),
+        child: FloatingActionButton(
+          onPressed: _showHelpDialog,
+          tooltip: 'Ayuda',
+          child: const Icon(Icons.help_outline),
+        ),
       ),
     );
   }

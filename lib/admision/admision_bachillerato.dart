@@ -183,8 +183,58 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 					),
 				],
 			),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 16, right: 16),
+        child: FloatingActionButton(
+          onPressed: () => _showHelpDialog(context),
+          tooltip: 'Ayuda',
+          child: const Icon(Icons.help_outline),
+        ),
+      ),
 		);
 	}
+
+		void _showHelpDialog(BuildContext context) {
+			showDialog(
+				context: context,
+				builder: (context) => AlertDialog(
+					shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+					title: const Row(
+						children: [
+							Icon(Icons.help_outline, size: 32),
+							SizedBox(width: 8),
+							Expanded(
+								child: Text(
+									'¿Necesitas ayuda?',
+									style: TextStyle(fontWeight: FontWeight.bold),
+								),
+							),
+						],
+					),
+					content: const Column(
+						mainAxisSize: MainAxisSize.min,
+						crossAxisAlignment: CrossAxisAlignment.start,
+						children: [
+							Text('Si tienes dudas sobre tu registro, puedes contactarnos:'),
+							SizedBox(height: 12),
+							Text('📧 Correo:'),
+							SelectableText('aspirante@uth.edu.mx'),
+							SizedBox(height: 8),
+							Text('📞 Teléfonos:'),
+							Text('227 275 9311'),
+							Text('227 275 9313'),
+						],
+					),
+					actions: [
+						TextButton(
+							onPressed: () => Navigator.pop(context),
+							child: const Text('Cerrar'),
+						),
+					],
+				),
+			);
+		}
 
 	Widget _formContent(BuildContext context) {
 		final textTheme = Theme.of(context).textTheme;
@@ -298,6 +348,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 								),
 							)
 							.toList(),
+					isExpanded: true,
 					decoration: const InputDecoration(
 						labelText: 'Carrera',
 						prefixIcon: Icon(Icons.school_outlined),
