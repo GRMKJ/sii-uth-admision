@@ -16,7 +16,7 @@ class _NavItemData {
 const List<_NavItemData> _publicNavItems = [
   _NavItemData(Icons.login, 'Inicio'),
   _NavItemData(Icons.person_add_alt, 'Admisión'),
-  _NavItemData(Icons.exit_to_app, 'Portal'),
+  _NavItemData(Icons.exit_to_app, 'UTH.edu.mx'),
   _NavItemData(Icons.settings, 'Ajustes'),
 ];
 
@@ -36,7 +36,6 @@ const List<_NavItemData> _adminNavItems = [
   _NavItemData(Icons.rule_folder, 'Aspirantes'),
   _NavItemData(Icons.account_balance, 'Finanzas'),
   _NavItemData(Icons.settings, 'Ajustes'),
-  _NavItemData(Icons.logout, 'Salir'),
 ];
 
 List<NavigationDestination> _buildNavigationDestinations(List<_NavItemData> items) {

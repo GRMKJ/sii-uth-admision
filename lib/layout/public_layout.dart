@@ -19,7 +19,7 @@ class PublicLayout extends StatelessWidget {
     if (location == '/') return 0;
     if (location.startsWith('/admision')) return 1;
     if (location.startsWith('/uth')) return 2;
-    if (location.startsWith('/settings')) return 3;
+    if (location.startsWith('/ajustes')) return 3;
     return 0;
   }
 
@@ -53,7 +53,7 @@ class PublicLayout extends StatelessWidget {
           openUthSite();
           break;
         case 3:
-          context.go('/settings');
+          context.go('/ajustes');
           break;
       }
     }

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:go_router/go_router.dart';
+import 'package:siiadmision/config/session.dart';
 import 'package:siiadmision/config/theme_controller.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -7,6 +10,12 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final session = Session();
+    final identity = session.identity;
+    final displayName = session.displayName ?? 'Usuario';
+    final identifierLabel = session.identifierLabel ?? 'Identificador';
+    final identifierValue = session.identifier ?? 'No disponible';
+    final roleLabel = _roleLabel(session.role);
 
     return SafeArea(
       child: LayoutBuilder(
@@ -44,6 +53,63 @@ class SettingsScreen extends StatelessWidget {
                     Text(
                       'Configura la apariencia de la aplicación según tus preferencias.',
                       style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 24),
+                    Card(
+                      elevation: 0,
+                      color: colors.surfaceContainerHighest,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 28,
+                                  backgroundColor: colors.primaryContainer,
+                                  child: Icon(
+                                    identity == null ? Icons.person_outline : Icons.verified_user_outlined,
+                                    color: colors.onPrimaryContainer,
+                                    size: 28,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        displayName,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(roleLabel, style: Theme.of(context).textTheme.bodyMedium),
+                                      Text('$identifierLabel: $identifierValue',
+                                          style: Theme.of(context).textTheme.bodySmall),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              icon: const Icon(Icons.logout),
+                              onPressed: () => _handleLogout(context),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: colors.errorContainer,
+                                foregroundColor: colors.onErrorContainer,
+                              ),
+                              label: const Text('Cerrar sesión'),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Card(
@@ -131,6 +197,37 @@ class SettingsScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+
+  String _roleLabel(String? role) {
+    switch (role) {
+      case 'aspirante':
+        return 'Aspirante';
+      case 'alumno':
+        return 'Alumno';
+      case 'admin':
+      case 'administrativo':
+        return 'Administrativo';
+      default:
+        return 'Sesión sin identificar';
+    }
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    final storage = const FlutterSecureStorage();
+    final session = Session();
+
+    await storage.delete(key: 'auth_token');
+    await storage.delete(key: 'role');
+    await session.clearPersistentIdentity();
+    await session.clearPersistentRole();
+    session.logout();
+
+    if (!context.mounted) return;
+    context.go('/');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sesión cerrada correctamente')),
     );
   }
 }

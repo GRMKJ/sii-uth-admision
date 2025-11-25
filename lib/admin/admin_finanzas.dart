@@ -114,14 +114,10 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
           context.go('/admin/aspirantes');
           break;
         case 2:
+          context.go('/admin/finanzas');
           break;
         case 3:
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Módulo no implementado todavía')),
-          );
-          break;
-        case 4:
-          context.go('/');
+          context.go('/ajustes');
           break;
       }
     }

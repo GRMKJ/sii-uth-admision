@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:root_jailbreak_detector/root_jailbreak_detector.dart';
 import 'package:siiadmision/admin/admin_aspirantes.dart';
@@ -21,6 +22,7 @@ import 'package:siiadmision/layout/public_layout.dart';
 import 'package:siiadmision/admin/admin_inicio.dart';
 import 'package:siiadmision/admin/admin_aspirantes_detalles.dart';
 import 'package:siiadmision/admin/admin_finanzas.dart';
+import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/session.dart';
 import 'package:siiadmision/config/theme_controller.dart';
 import 'package:siiadmision/settings/settings_screen.dart';
@@ -29,11 +31,16 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'config/platform_info.dart';
 import 'admision/models/bachillerato_form_data.dart';
 
+late GoRouter _router;
+
 void main() async {
   setUrlStrategy(PathUrlStrategy());
   WidgetsFlutterBinding.ensureInitialized();
   await Session().load(); 
   await themeController.loadThemeMode();
+
+  final initialLocation = await _resolveInitialLocation();
+  _router = _buildRouter(initialLocation);
 
   // Only run jailbreak detection on real mobile platforms (Android/iOS).
   // The plugin is not implemented on web/desktop and will throw
@@ -60,8 +67,9 @@ void main() async {
   runApp(MyApp(themeController: themeController));
 }
 
-final GoRouter _router = GoRouter(
-  initialLocation: '/',
+GoRouter _buildRouter(String initialLocation) {
+  return GoRouter(
+  initialLocation: initialLocation,
   redirect: (context, state) {
     final session = Session();
 
@@ -109,7 +117,7 @@ final GoRouter _router = GoRouter(
         GoRoute(path: '/admision/documentos', builder: (_, __) => const DocumentosScreen()),
         GoRoute(path: '/admision/documentos/subida', builder: (_, __) => const UploadDocumentsScreen()),
         GoRoute(path: '/admision/documentos/estado', builder: (_, __) => const DocumentosStatusScreen()),
-        GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+        GoRoute(path: '/ajustes', builder: (_, __) => const SettingsScreen()),
       ],
     ),
     GoRoute(
@@ -133,6 +141,86 @@ final GoRouter _router = GoRouter(
     GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.pathParameters['referencia']!)),
   ],
 );
+}
+
+Future<String> _resolveInitialLocation() async {
+  const storage = FlutterSecureStorage();
+  final token = await storage.read(key: 'auth_token');
+  final session = Session();
+
+  if (token == null || token.isEmpty) {
+    return '/';
+  }
+
+  if (session.isAdmin) {
+    return '/admin/inicio';
+  }
+
+  if (session.isAlumno) {
+    return '/alumno/inicio';
+  }
+
+  if (session.isAspirante) {
+    try {
+      final response = await ApiClient.getJson('/aspirantes/progress', token: token);
+      if (response['success'] == true) {
+        final step = _extractProgressStep(response);
+        if (step != null) {
+          return _routeForAspiranteStep(step);
+        }
+      }
+    } catch (_) {
+      // Silently fall back to default admission path
+    }
+    return '/admision';
+  }
+
+  return '/';
+}
+
+int? _extractProgressStep(Map<String, dynamic> stepResponse) {
+  dynamic rawStep;
+  if (stepResponse.containsKey('step')) {
+    rawStep = stepResponse['step'];
+  } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
+    rawStep = (stepResponse['data'] as Map)['step'];
+  }
+
+  if (rawStep == null) {
+    return null;
+  }
+
+  if (rawStep is int) {
+    return rawStep;
+  }
+
+  if (rawStep is String) {
+    return int.tryParse(rawStep);
+  }
+
+  return null;
+}
+
+String _routeForAspiranteStep(int step) {
+  switch (step) {
+    case 1:
+      return '/admision';
+    case 2:
+      return '/admision/bachillerato';
+    case 3:
+      return '/admision/pagoexamen';
+    case 4:
+      return '/admision/pagoexamen/status';
+    case 5:
+      return '/admision/documentos/subida';
+    case 6:
+      return '/admision/documentos/estado';
+    case 7:
+      return '/alumno/inicio';
+    default:
+      return '/';
+  }
+}
 
 class _ResetRouteWrapper extends StatelessWidget {
   final GoRouterState state;
@@ -223,7 +311,7 @@ class ShellLayout extends StatelessWidget {
           context.go('/uth');
           break;
         case 3:
-          context.go('/settings');
+          context.go('/ajustes');
           break;
       }
     }

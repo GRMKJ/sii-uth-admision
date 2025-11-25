@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
+import 'package:siiadmision/config/local_user_store.dart';
 import 'package:siiadmision/config/session.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -234,7 +235,10 @@ class _LoginScreenState extends State<LoginScreen> {
       await storage.write(key: "auth_token", value: token);
       await storage.write(key: "role", value: role);
 
-      await Session().load();
+      final session = Session();
+      await session.saveIdentity(_buildLocalIdentityPayload(user));
+
+      await session.load();
 
       switch (role) {
         case "aspirante":
@@ -287,6 +291,74 @@ class _LoginScreenState extends State<LoginScreen> {
         SnackBar(content: Text("Error al iniciar sesión: $e")),
       );
     }
+  }
+
+  LocalIdentity _buildLocalIdentityPayload(Map<String, dynamic> user) {
+    final rawRole = (user['role'] as String?) ?? '';
+    final identityMap = _toStringKeyedMap(user['identity']);
+    final name = (user['name'] as String? ?? '').trim();
+
+    return LocalIdentity(
+      role: rawRole,
+      name: name.isEmpty ? 'Usuario' : name,
+      identifier: _resolveIdentifierValue(rawRole, identityMap, user),
+      identifierLabel: _identifierLabelForRole(rawRole),
+    );
+  }
+
+  Map<String, dynamic> _toStringKeyedMap(dynamic value) {
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString().toLowerCase(), val));
+    }
+    return const {};
+  }
+
+  String _resolveIdentifierValue(
+    String role,
+    Map<String, dynamic> identityMap,
+    Map<String, dynamic> user,
+  ) {
+    switch (role) {
+      case 'aspirante':
+        return _stringValue(identityMap['curp']) ?? _stringValue(user['curp']) ?? '';
+      case 'alumno':
+        return _stringValue(identityMap['matricula']) ?? _stringValue(user['matricula']) ?? '';
+      case 'administrativo':
+        return _stringValue(identityMap['numero_empleado']) ??
+            _stringValue(identityMap['num_empleado']) ??
+            _stringValue(user['numero_empleado']) ?? '';
+      default:
+        break;
+    }
+
+    if (identityMap.isNotEmpty) {
+      final first = identityMap.values.first;
+      final candidate = _stringValue(first);
+      if (candidate != null) {
+        return candidate;
+      }
+    }
+
+    return _stringValue(user['identity']) ?? _stringValue(user['id']) ?? '';
+  }
+
+  String _identifierLabelForRole(String role) {
+    switch (role) {
+      case 'aspirante':
+        return 'CURP';
+      case 'alumno':
+        return 'Matrícula';
+      case 'administrativo':
+        return 'Número de empleado';
+      default:
+        return 'Identificador';
+    }
+  }
+
+  String? _stringValue(Object? value) {
+    if (value == null) return null;
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
   }
 }
 

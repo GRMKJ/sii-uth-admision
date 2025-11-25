@@ -79,12 +79,7 @@ class _DashboardAdminScreenState extends State<DashboardAdminScreen> {
           context.go('/admin/finanzas');
           break;
         case 3:
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('M�dulo no implementado')),
-          );
-          break;
-        case 4:
-          context.go('/');
+          context.go('/ajustes');
           break;
       }
     }
