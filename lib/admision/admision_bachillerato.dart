@@ -26,6 +26,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 	bool _loadingCarreras = true;
 	bool _loadingBachilleratos = true;
 	String? _error;
+	bool _savingAcademic = false;
 
 	@override
 	void initState() {
@@ -367,32 +368,88 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 				Align(
 					alignment: Alignment.bottomRight,
 					child: FilledButton(
-						onPressed: _goToPayment,
-						child: const Text('Continuar al pago'),
+						onPressed: _savingAcademic ? null : _goToPayment,
+						child: _savingAcademic
+								? const SizedBox(
+										width: 24,
+										height: 24,
+										child: CircularProgressIndicator(strokeWidth: 2),
+								)
+								: const Text('Continuar al pago'),
 					),
 				),
 			],
 		);
 	}
 
-	void _goToPayment() {
-		final promedio = _promedioCtrl.text.trim();
-		if (_selectedBachilleratoId == null || _selectedCarreraId == null || promedio.isEmpty) {
-			ScaffoldMessenger.of(context).showSnackBar(
-				const SnackBar(content: Text('Completa bachillerato, promedio y carrera.')),
-			);
-			return;
-		}
+			Future<void> _goToPayment() async {
+				if (_savingAcademic) return;
 
-		final data = BachilleratoFormData(
-			bachilleratoId: _selectedBachilleratoId!,
-			bachilleratoDescripcion: _selectedBachilleratoNombre,
-			carreraId: _selectedCarreraId!,
-			carreraNombre: _selectedCarreraNombre,
-			promedio: promedio,
-		);
+				final promedio = _promedioCtrl.text.trim();
+				if (_selectedBachilleratoId == null || _selectedCarreraId == null || promedio.isEmpty) {
+					ScaffoldMessenger.of(context).showSnackBar(
+						const SnackBar(content: Text('Completa bachillerato, promedio y carrera.')),
+					);
+					return;
+				}
 
-		context.push('/admision/pagoexamen', extra: data);
+				final promedioValue = double.tryParse(promedio.replaceAll(',', '.'));
+				if (promedioValue == null || promedioValue < 0 || promedioValue > 10) {
+					ScaffoldMessenger.of(context).showSnackBar(
+						const SnackBar(content: Text('Ingresa un promedio válido entre 0 y 10.')),
+					);
+					return;
+				}
+
+				final bachilleratoId = int.tryParse(_selectedBachilleratoId ?? '');
+				final carreraId = int.tryParse(_selectedCarreraId ?? '');
+				if (bachilleratoId == null || carreraId == null) {
+					ScaffoldMessenger.of(context).showSnackBar(
+						const SnackBar(content: Text('Ocurrió un error al interpretar tus selecciones. Vuelve a elegirlas.')),
+					);
+					return;
+				}
+
+				final token = await _storage.read(key: 'auth_token');
+				if (token == null) {
+					ScaffoldMessenger.of(context).showSnackBar(
+						const SnackBar(content: Text('No se encontró la sesión. Inicia sesión nuevamente.')),
+					);
+					return;
+				}
+
+				setState(() => _savingAcademic = true);
+				try {
+					await ApiClient.postJson(
+						'/aspirantes/academico',
+						token: token,
+						body: {
+							'id_bachillerato': _selectedBachilleratoId,
+							'promedio_general': promedioValue,
+							'id_carrera': _selectedCarreraId,
+						},
+					);
+          
+					final data = BachilleratoFormData(
+						bachilleratoId: _selectedBachilleratoId!,
+						bachilleratoDescripcion: _selectedBachilleratoNombre,
+						carreraId: _selectedCarreraId!,
+						carreraNombre: _selectedCarreraNombre,
+						promedio: promedio,
+					);
+
+					if (!mounted) return;
+					context.push('/admision/pagoexamen', extra: data);
+				} catch (e) {
+					if (!mounted) return;
+					ScaffoldMessenger.of(context).showSnackBar(
+						SnackBar(content: Text('Error al guardar tus datos: $e')),
+					);
+				} finally {
+					if (mounted) {
+						setState(() => _savingAcademic = false);
+					}
+				}
 	}
 
 	Future<Map<String, dynamic>?> _showAddBachilleratoDialog() async {

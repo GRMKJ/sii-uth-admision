@@ -110,6 +110,8 @@ GoRouter _buildRouter(String initialLocation) {
             final extra = state.extra;
             return PaymentScreen(
               formData: extra is BachilleratoFormData ? extra : null,
+              sessionIdFromQuery: state.uri.queryParameters['session_id'],
+              statusFromQuery: state.uri.queryParameters['status'],
             );
           },
         ),

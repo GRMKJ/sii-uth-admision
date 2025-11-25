@@ -44,7 +44,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
   static const Map<String, String> _sexoOptions = {
     'H': 'Hombre',
     'M': 'Mujer',
-    'N': 'No binario',
+    'X': 'No binario',
   };
 
   final _estadosMx = const [

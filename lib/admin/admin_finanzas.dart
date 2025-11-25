@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:siiadmision/config/api_client.dart';
@@ -15,6 +16,7 @@ class AdminFinanzasScreen extends StatefulWidget {
 }
 
 class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
+  static const int _diagnosticConfigId = 3;
   final storage = const FlutterSecureStorage();
   final Random _random = Random.secure();
 
@@ -24,6 +26,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
 
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _referenciaController = TextEditingController();
+  final TextEditingController _montoController = TextEditingController();
 
   List<Map<String, dynamic>> _conceptos = [];
   Map<String, dynamic>? _selectedConcepto;
@@ -41,6 +44,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
   void initState() {
     super.initState();
     _searchController.addListener(_applyFilters);
+    _montoController.addListener(() => setState(() {}));
     _referenciaController.text = _generateReferencia();
     _loadInitialData();
   }
@@ -61,10 +65,25 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
       final payload = response['data'] as Map<String, dynamic>?;
       final rows = payload?['data'] as List<dynamic>? ?? [];
       final conceptos = rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final lockedConcept = conceptos.where((element) => element['id'] == _diagnosticConfigId).toList();
+      final effectiveConceptos = lockedConcept.isNotEmpty ? lockedConcept : conceptos;
+      Map<String, dynamic>? nextSelected;
+      if (effectiveConceptos.isNotEmpty) {
+        final currentId = _selectedConcepto?['id'];
+        if (currentId != null) {
+          nextSelected = effectiveConceptos.firstWhere(
+            (element) => element['id'] == currentId,
+            orElse: () => effectiveConceptos.first,
+          );
+        } else {
+          nextSelected = effectiveConceptos.first;
+        }
+      }
       setState(() {
-        _conceptos = conceptos;
-        _selectedConcepto ??= conceptos.isNotEmpty ? conceptos.first : null;
+        _conceptos = effectiveConceptos;
+        _selectedConcepto = nextSelected;
         _loadingConceptos = false;
+        _syncMontoController(nextSelected);
       });
     } catch (e) {
       setState(() => _loadingConceptos = false);
@@ -97,6 +116,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     _searchController.removeListener(_applyFilters);
     _searchController.dispose();
     _referenciaController.dispose();
+    _montoController.dispose();
     super.dispose();
   }
 
@@ -212,7 +232,8 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
   }
 
   Widget _buildRegistroCard(ColorScheme colors, {bool compact = false}) {
-    final monto = _selectedConcepto != null ? _safeMonto(_selectedConcepto!['monto']) : null;
+    final montoBase = _selectedConcepto != null ? _safeMonto(_selectedConcepto!['monto']) : null;
+    final montoSeleccionado = _montoIngresado ?? montoBase;
     final bottomSpacer = compact ? const SizedBox(height: 16) : const Spacer();
 
     return Card(
@@ -228,25 +249,38 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
             else if (_conceptos.isEmpty)
               const Text('No hay conceptos configurados.')
             else ...[
-              SizedBox(
-                width: double.infinity,
-                child: DropdownMenu<int>(
-                  label: const Text('Concepto del pago'),
-                  initialSelection: _selectedConcepto?['id'] as int?,
-                  dropdownMenuEntries: _conceptos
-                      .map(
-                        (concepto) => DropdownMenuEntry<int>(
-                          value: concepto['id'] as int,
-                          label: concepto['concepto']?.toString() ?? 'Concepto',
-                        ),
-                      )
-                      .toList(),
-                  onSelected: (value) {
-                    if (value == null) return;
-                    final concept = _conceptos.firstWhere((element) => element['id'] == value);
-                    setState(() => _selectedConcepto = concept);
-                  },
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownMenu<int>(
+                      label: const Text('Concepto del pago'),
+                      initialSelection: _selectedConcepto?['id'] as int?,
+                      dropdownMenuEntries: _conceptos
+                          .map(
+                            (concepto) => DropdownMenuEntry<int>(
+                              value: concepto['id'] as int,
+                              label: concepto['concepto']?.toString() ?? 'Concepto',
+                            ),
+                          )
+                          .toList(),
+                      enabled: _conceptos.length > 1,
+                      onSelected: (value) {
+                        if (value == null) return;
+                        final concept = _conceptos.firstWhere((element) => element['id'] == value);
+                        setState(() {
+                          _selectedConcepto = concept;
+                          _syncMontoController(concept);
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Actualizar conceptos',
+                    onPressed: _loadingConceptos ? null : _fetchConceptos,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               Container(
@@ -262,10 +296,36 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
                     Text('Monto', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: colors.onPrimaryContainer.withAlpha((0.8 * 255).round()))),
                     const SizedBox(height: 4),
                     Text(
-                      monto != null ? _formatCurrency(monto) : 'Selecciona un concepto',
+                      montoSeleccionado != null
+                          ? _formatCurrency(montoSeleccionado)
+                          : 'Selecciona un concepto o captura un monto',
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: colors.onPrimaryContainer, fontWeight: FontWeight.bold),
                     ),
+                    if (_montoIngresado != null && montoBase != null && (_montoIngresado! - montoBase).abs() > 0.009)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Base del concepto: ${_formatCurrency(montoBase)}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onPrimaryContainer.withOpacity(0.8)),
+                        ),
+                      ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _montoController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'Monto a cobrar',
+                  prefixText: '\$',
+                  helperText: _montoController.text.trim().isEmpty
+                      ? 'Ingresa el monto que se va a registrar.'
+                      : 'Recuerda que este monto quedará guardado en el pago.',
+                  errorText: _montoFieldError,
                 ),
               ),
               const SizedBox(height: 12),
@@ -514,6 +574,34 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     return null;
   }
 
+  void _syncMontoController(Map<String, dynamic>? concepto) {
+    final monto = concepto != null ? _safeMonto(concepto['monto']) : null;
+    final text = monto != null ? monto.toStringAsFixed(2) : '';
+    _montoController.value = _montoController.value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  double? get _montoIngresado {
+    final raw = _montoController.text.replaceAll(',', '.').trim();
+    if (raw.isEmpty) return null;
+    return double.tryParse(raw);
+  }
+
+  String? get _montoFieldError {
+    final text = _montoController.text.trim();
+    if (text.isEmpty) return null;
+    final monto = _montoIngresado;
+    if (monto == null) {
+      return 'Formato inválido. Usa punto decimal (ej. 500.00).';
+    }
+    if (monto <= 0) {
+      return 'El monto debe ser mayor a cero.';
+    }
+    return null;
+  }
+
   String _formatCurrency(double value) => '\$${value.toStringAsFixed(2)} MXN';
 
   String _stepLabel(dynamic stepValue) {
@@ -565,7 +653,14 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  bool get _canSubmit => !_submitting && _selectedConcepto != null && _selectedAspirante != null;
+  bool get _canSubmit {
+    final monto = _montoIngresado;
+    return !_submitting &&
+        _selectedConcepto != null &&
+        _selectedAspirante != null &&
+        monto != null &&
+        monto > 0;
+  }
 
   Future<void> _handleSubmitTap() async {
     if (!_canSubmit) return;
@@ -576,19 +671,29 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
   }
 
   Future<void> _submitPago() async {
-    if (!_canSubmit) return;
+    if (!_canSubmit) {
+      _showSnackBar('Completa la información del pago antes de guardar.', isError: true);
+      return;
+    }
+    final monto = _montoIngresado;
+    if (monto == null || monto <= 0) {
+      _showSnackBar('Ingresa un monto válido.', isError: true);
+      return;
+    }
     setState(() => _submitting = true);
     try {
       final token = await storage.read(key: 'auth_token');
       if (token == null) throw Exception('Token no encontrado');
 
+      final conceptoId = _selectedConcepto?['id'] as int? ?? _diagnosticConfigId;
       final body = {
         'id_aspirantes': _selectedAspirante!['id_aspirantes'],
-        'id_configuracion': _selectedConcepto!['id'],
+        'id_configuracion': conceptoId,
         'tipo_pago': 'ventanilla',
         'metodo_pago': _metodoPago,
         'fecha_pago': _fechaPago.toIso8601String(),
         'referencia': _referenciaController.text.trim().isEmpty ? null : _referenciaController.text.trim(),
+        'monto_pagado': monto,
       }..removeWhere((key, value) => value == null);
 
       final response = await ApiClient.postJson('/pagos', body: body, token: token);
@@ -621,7 +726,8 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
     final curp = aspirante != null ? _curpAspirante(aspirante) : 'N/D';
     final conceptoLabel = concepto?['concepto']?.toString() ?? 'Sin concepto';
     final monto = concepto != null ? _safeMonto(concepto['monto']) : null;
-    final montoLabel = monto != null ? _formatCurrency(monto) : 'N/D';
+    final montoSeleccionado = _montoIngresado ?? monto;
+    final montoLabel = montoSeleccionado != null ? _formatCurrency(montoSeleccionado) : 'N/D';
     final metodo = _metodoPago;
     final fecha = _formatDate(_fechaPago);
     final referencia = _referenciaController.text.trim().isEmpty ? 'N/D' : _referenciaController.text.trim();
