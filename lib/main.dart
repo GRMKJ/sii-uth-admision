@@ -131,11 +131,16 @@ GoRouter _buildRouter(String initialLocation) {
       path: '/alumno/inicio',
       builder: (context, state) => const DashboardAlumnoScreen(),
     ),
+    GoRoute(
+      path: '/alumno/ajustes',
+      builder: (context, state) => const AlumnoSettingsScreen(),
+    ),
 
     // Rutas privadas de admin
     GoRoute(path: '/admin/inicio', builder: (_, __) => const DashboardAdminScreen()),
     GoRoute(path: '/admin/aspirantes', builder: (_, __) => const AspirantesAdminScreen()),
     GoRoute(path: '/admin/finanzas', builder: (_, __) => const AdminFinanzasScreen()),
+    GoRoute(path: '/admin/ajustes', builder: (_, __) => const AdminSettingsScreen()),
     GoRoute(path: '/admin/aspirante/:referencia/pago', builder: (context, state) => PagoDetalleScreen(referencia: state.pathParameters['referencia']!)),
     GoRoute(path: '/admin/aspirante/:referencia/documentos', builder: (context, state) => VerDocumentosScreen(folio: state.pathParameters['referencia']!)),
     GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.pathParameters['referencia']!)),

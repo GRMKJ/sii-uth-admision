@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:siiadmision/config/session.dart';
 import 'package:siiadmision/config/theme_controller.dart';
+import 'package:siiadmision/layout/header.dart';
+import 'package:siiadmision/layout/side_navigation.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -12,6 +14,7 @@ class SettingsScreen extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final session = Session();
     final identity = session.identity;
+    final isLoggedIn = session.isLoggedIn;
     final displayName = session.displayName ?? 'Usuario';
     final identifierLabel = session.identifierLabel ?? 'Identificador';
     final identifierValue = session.identifier ?? 'No disponible';
@@ -21,179 +24,200 @@ class SettingsScreen extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
-          final contentWidth = screenWidth.clamp(320.0, 900.0);
+          final contentWidth = screenWidth.clamp(320.0, 1280.0);
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Center(
-              child: Container(
+          return Column(
+            children: [
+              SizedBox(
                 width: contentWidth,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: colors.shadow.withAlpha((0.08 * 255).round()),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Ajustes',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Configura la apariencia de la aplicación según tus preferencias.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 24),
-                    Card(
-                      elevation: 0,
-                      color: colors.surfaceContainerHighest,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                child: UthHeader(maxWidth: contentWidth),
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Container(
+                      width: contentWidth,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: colors.shadow.withAlpha((0.08 * 255).round()),
+                            blurRadius: 12,
+                          ),
+                        ],
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 28,
-                                  backgroundColor: colors.primaryContainer,
-                                  child: Icon(
-                                    identity == null ? Icons.person_outline : Icons.verified_user_outlined,
-                                    color: colors.onPrimaryContainer,
-                                    size: 28,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        displayName,
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(roleLabel, style: Theme.of(context).textTheme.bodyMedium),
-                                      Text('$identifierLabel: $identifierValue',
-                                          style: Theme.of(context).textTheme.bodySmall),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton.icon(
-                              icon: const Icon(Icons.logout),
-                              onPressed: () => _handleLogout(context),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: colors.errorContainer,
-                                foregroundColor: colors.onErrorContainer,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ajustes',
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Configura la apariencia de la aplicación según tus preferencias.',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 24),
+                          if (isLoggedIn) ...[
+                            Card(
+                              elevation: 0,
+                              color: colors.surfaceContainerHighest,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                              label: const Text('Cerrar sesión'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Card(
-                      elevation: 0,
-                      color: colors.surfaceContainerHighest,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: AnimatedBuilder(
-                          animation: themeController,
-                          builder: (context, _) {
-                            final dropdown = ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 260),
-                              child: DropdownMenu<ThemeMode>(
-                                initialSelection: themeController.mode,
-                                dropdownMenuEntries: const [
-                                  DropdownMenuEntry(
-                                    value: ThemeMode.system,
-                                    label: 'Sistema (predeterminado)',
-                                  ),
-                                  DropdownMenuEntry(
-                                    value: ThemeMode.light,
-                                    label: 'Claro',
-                                  ),
-                                  DropdownMenuEntry(
-                                    value: ThemeMode.dark,
-                                    label: 'Oscuro',
-                                  ),
-                                ],
-                                onSelected: (mode) {
-                                  if (mode != null) {
-                                    themeController.updateMode(mode);
-                                  }
-                                },
-                              ),
-                            );
-
-                            final description = Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Text(
-                                  'Tema de la Aplicación',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Elige entre tema claro, oscuro o sigue la configuración del sistema.',
-                                ),
-                              ],
-                            );
-
-                            return LayoutBuilder(
-                              builder: (context, innerConstraints) {
-                                final isNarrow = innerConstraints.maxWidth < 520;
-                                if (isNarrow) {
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      description,
-                                      const SizedBox(height: 16),
-                                      dropdown,
-                                    ],
-                                  );
-                                }
-                                return Row(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(child: description),
-                                    const SizedBox(width: 24),
-                                    dropdown,
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 28,
+                                          backgroundColor: colors.primaryContainer,
+                                          child: Icon(
+                                            identity == null
+                                                ? Icons.person_outline
+                                                : Icons.verified_user_outlined,
+                                            color: colors.onPrimaryContainer,
+                                            size: 28,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                displayName,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium
+                                                    ?.copyWith(fontWeight: FontWeight.w600),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                roleLabel,
+                                                style: Theme.of(context).textTheme.bodyMedium,
+                                              ),
+                                              Text(
+                                                '$identifierLabel: $identifierValue',
+                                                style: Theme.of(context).textTheme.bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    FilledButton.icon(
+                                      icon: const Icon(Icons.logout),
+                                      onPressed: () => _handleLogout(context),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: colors.errorContainer,
+                                        foregroundColor: colors.onErrorContainer,
+                                      ),
+                                      label: const Text('Cerrar sesión'),
+                                    ),
                                   ],
-                                );
-                              },
-                            );
-                          },
-                        ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
+                          Card(
+                            elevation: 0,
+                            color: colors.surfaceContainerHighest,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: AnimatedBuilder(
+                                animation: themeController,
+                                builder: (context, _) {
+                                  final dropdown = ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 260),
+                                    child: DropdownMenu<ThemeMode>(
+                                      initialSelection: themeController.mode,
+                                      dropdownMenuEntries: const [
+                                        DropdownMenuEntry(
+                                          value: ThemeMode.system,
+                                          label: 'Sistema (predeterminado)',
+                                        ),
+                                        DropdownMenuEntry(
+                                          value: ThemeMode.light,
+                                          label: 'Claro',
+                                        ),
+                                        DropdownMenuEntry(
+                                          value: ThemeMode.dark,
+                                          label: 'Oscuro',
+                                        ),
+                                      ],
+                                      onSelected: (mode) {
+                                        if (mode != null) {
+                                          themeController.updateMode(mode);
+                                        }
+                                      },
+                                    ),
+                                  );
+
+                                  final description = Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: const [
+                                      Text(
+                                        'Tema de la Aplicación',
+                                        style: TextStyle(fontWeight: FontWeight.w600),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Elige entre tema claro, oscuro o sigue la configuración del sistema.',
+                                      ),
+                                    ],
+                                  );
+
+                                  return LayoutBuilder(
+                                    builder: (context, innerConstraints) {
+                                      final isNarrow = innerConstraints.maxWidth < 520;
+                                      if (isNarrow) {
+                                        return Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            description,
+                                            const SizedBox(height: 16),
+                                            dropdown,
+                                          ],
+                                        );
+                                      }
+                                      return Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(child: description),
+                                          const SizedBox(width: 24),
+                                          dropdown,
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           );
         },
       ),
@@ -228,6 +252,114 @@ class SettingsScreen extends StatelessWidget {
     context.go('/');
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Sesión cerrada correctamente')),
+    );
+  }
+}
+
+class AdminSettingsScreen extends StatelessWidget {
+  const AdminSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final useRail = useNavigationRailLayout(context);
+
+    void handleNavigation(int index) {
+      switch (index) {
+        case 0:
+          context.go('/admin/inicio');
+          break;
+        case 1:
+          context.go('/admin/aspirantes');
+          break;
+        case 2:
+          context.go('/admin/finanzas');
+          break;
+        case 3:
+          break;
+      }
+    }
+
+    const settingsContent = SettingsScreen();
+
+    return Scaffold(
+      backgroundColor: colors.surfaceContainerLowest,
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: 3,
+              destinations: adminNavigationDestinations,
+              onDestinationSelected: handleNavigation,
+            ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigationAdmin(
+                    selectedIndex: 3,
+                    onDestinationSelected: handleNavigation,
+                  ),
+                ),
+                const Expanded(child: settingsContent),
+              ],
+            )
+          : settingsContent,
+    );
+  }
+}
+
+class AlumnoSettingsScreen extends StatelessWidget {
+  const AlumnoSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final useRail = useNavigationRailLayout(context);
+
+    void handleNavigation(int index) {
+      switch (index) {
+        case 0:
+          context.go('/alumno/inicio');
+          break;
+        case 6:
+          context.go('/alumno/ajustes');
+          break;
+        case 7:
+          context.go('/');
+          break;
+        default:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Módulo no implementado')),
+          );
+      }
+    }
+
+    const settingsContent = SettingsScreen();
+
+    return Scaffold(
+      backgroundColor: colors.surfaceContainerLowest,
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: 6,
+              destinations: alumnoNavigationDestinations,
+              onDestinationSelected: handleNavigation,
+            ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigationAlumno(
+                    selectedIndex: 6,
+                    onDestinationSelected: handleNavigation,
+                  ),
+                ),
+                const Expanded(child: settingsContent),
+              ],
+            )
+          : settingsContent,
     );
   }
 }

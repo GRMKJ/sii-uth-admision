@@ -23,6 +23,9 @@ class _DashboardAlumnoScreenState extends State<DashboardAlumnoScreen> {
         case 0:
           context.go('/alumno/inicio');
           break;
+        case 6:
+          context.go('/alumno/ajustes');
+          break;
         case 7:
           context.go('/');
           break;

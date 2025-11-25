@@ -117,7 +117,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
           context.go('/admin/finanzas');
           break;
         case 3:
-          context.go('/ajustes');
+          context.go('/admin/ajustes');
           break;
       }
     }

@@ -79,7 +79,7 @@ class _DashboardAdminScreenState extends State<DashboardAdminScreen> {
           context.go('/admin/finanzas');
           break;
         case 3:
-          context.go('/ajustes');
+          context.go('/admin/ajustes');
           break;
       }
     }
