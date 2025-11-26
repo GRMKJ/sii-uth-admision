@@ -221,6 +221,8 @@ class AspiranteDetalleScreen extends StatefulWidget {
 
 class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
   Map<String, dynamic>? data;
+  int? _selectedStep;
+  bool _updatingStep = false;
 
   @override
   void initState() {
@@ -231,7 +233,57 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
   Future<void> _fetchDetalle() async {
     final token = await const FlutterSecureStorage().read(key: 'auth_token');
     final res = await ApiClient.getJson('/aspirantes/${widget.aspiranteId}', token: token);
-    setState(() => data = res['data']);
+    Map<String, dynamic>? payload;
+    final rawData = res['data'];
+    if (rawData is Map<String, dynamic>) {
+      payload = rawData;
+    } else if (rawData is Map && rawData['aspirante'] is Map<String, dynamic>) {
+      payload = Map<String, dynamic>.from(rawData['aspirante'] as Map);
+    }
+    setState(() {
+      data = payload;
+      _selectedStep = (payload?['progress_step'] as num?)?.toInt();
+    });
+  }
+
+  Future<void> _updateProgressStep() async {
+    final newStep = _selectedStep;
+    final currentStep = (data?['progress_step'] as num?)?.toInt();
+    if (newStep == null || newStep == currentStep) {
+      return;
+    }
+
+    setState(() => _updatingStep = true);
+    try {
+      final token = await const FlutterSecureStorage().read(key: 'auth_token');
+      final res = await ApiClient.postJson(
+        '/admin/aspirantes/${widget.aspiranteId}/progress',
+        token: token,
+        body: {'step': newStep},
+      );
+      Map<String, dynamic>? updated;
+      final rawData = res['data'];
+      if (rawData is Map<String, dynamic>) {
+        updated = rawData;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        data = updated ?? data;
+        _selectedStep = (updated?['progress_step'] as num?)?.toInt() ?? newStep;
+        _updatingStep = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Paso actualizado correctamente.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _updatingStep = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo actualizar el paso: $e')),
+      );
+    }
   }
 
   @override
@@ -309,6 +361,8 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
                   _infoLine(context, 'Promedio general', (asp['promedio_general'] ?? 'N/D').toString()),
                   _infoLine(context, 'Paso actual', '${asp['progress_step'] ?? '-'}'),
                   _infoLine(context, 'Fecha de registro', asp['fecha_registro'] ?? 'N/D'),
+                  const SizedBox(height: 16),
+                  _buildStepControl(context, asp),
                 ],
               ),
             ),
@@ -317,6 +371,52 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStepControl(BuildContext context, Map<String, dynamic> asp) {
+    const stepOptions = [-1, 1, 2, 3, 4, 5, 6, 7];
+    final theme = Theme.of(context);
+    final currentStep = (asp['progress_step'] as num?)?.toInt();
+    final dropdownValue = _selectedStep ?? currentStep;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Control de workflow', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          value: dropdownValue,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Paso del aspirante',
+            border: OutlineInputBorder(),
+          ),
+          items: stepOptions
+              .map((step) => DropdownMenuItem<int>(
+                    value: step,
+                    child: Text(_stepLabel(step)),
+                  ))
+              .toList(),
+          onChanged: (value) => setState(() => _selectedStep = value),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: (_updatingStep || !_stepChangePending(currentStep)) ? null : _updateProgressStep,
+            icon: _updatingStep
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.sync_alt_outlined),
+            label: Text(_updatingStep ? 'Actualizando…' : 'Actualizar paso'),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Usa esta opción sólo para pruebas o soporte. El aspirante verá la pantalla correspondiente al paso seleccionado.',
+          style: theme.textTheme.bodySmall,
+        ),
+      ],
     );
   }
 
@@ -505,6 +605,35 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
         ),
       ),
     );
+  }
+
+  bool _stepChangePending(int? currentStep) {
+    final target = _selectedStep;
+    if (target == null) return false;
+    return target != currentStep;
+  }
+
+  String _stepLabel(int step) {
+    switch (step) {
+      case -1:
+        return 'Rechazado (-1)';
+      case 1:
+        return '1 - Registro';
+      case 2:
+        return '2 - Datos personales';
+      case 3:
+        return '3 - Pago examen';
+      case 4:
+        return '4 - Esperando folio';
+      case 5:
+        return '5 - Subida de documentos';
+      case 6:
+        return '6 - Revisión de documentos';
+      case 7:
+        return '7 - Alumno activo';
+      default:
+        return 'Paso $step';
+    }
   }
 
   Color _placeholderColor(String genero) {
