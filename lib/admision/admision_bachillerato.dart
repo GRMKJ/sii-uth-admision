@@ -43,7 +43,6 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 
 	Future<void> _fetchCarreras() async {
 		final token = await _storage.read(key: 'auth_token');
-    print(token);
 		try {
 			final data = await ApiClient.getJson('/catalogos/carreras', token: token);
 			final List carrerasData = data.containsKey('data') ? data['data'] : data;
@@ -337,7 +336,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 				),
 				const SizedBox(height: 16),
 				DropdownButtonFormField<String>(
-					value: _selectedCarreraId,
+					initialValue: _selectedCarreraId,
 					items: _carreras
 							.map(
 								(c) => DropdownMenuItem<String>(
@@ -384,10 +383,11 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 
 			Future<void> _goToPayment() async {
 				if (_savingAcademic) return;
+				final messenger = ScaffoldMessenger.of(context);
 
 				final promedio = _promedioCtrl.text.trim();
 				if (_selectedBachilleratoId == null || _selectedCarreraId == null || promedio.isEmpty) {
-					ScaffoldMessenger.of(context).showSnackBar(
+					messenger.showSnackBar(
 						const SnackBar(content: Text('Completa bachillerato, promedio y carrera.')),
 					);
 					return;
@@ -395,7 +395,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 
 				final promedioValue = double.tryParse(promedio.replaceAll(',', '.'));
 				if (promedioValue == null || promedioValue < 0 || promedioValue > 10) {
-					ScaffoldMessenger.of(context).showSnackBar(
+					messenger.showSnackBar(
 						const SnackBar(content: Text('Ingresa un promedio válido entre 0 y 10.')),
 					);
 					return;
@@ -404,7 +404,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 				final bachilleratoId = int.tryParse(_selectedBachilleratoId ?? '');
 				final carreraId = int.tryParse(_selectedCarreraId ?? '');
 				if (bachilleratoId == null || carreraId == null) {
-					ScaffoldMessenger.of(context).showSnackBar(
+					messenger.showSnackBar(
 						const SnackBar(content: Text('Ocurrió un error al interpretar tus selecciones. Vuelve a elegirlas.')),
 					);
 					return;
@@ -412,7 +412,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 
 				final token = await _storage.read(key: 'auth_token');
 				if (token == null) {
-					ScaffoldMessenger.of(context).showSnackBar(
+					messenger.showSnackBar(
 						const SnackBar(content: Text('No se encontró la sesión. Inicia sesión nuevamente.')),
 					);
 					return;
@@ -442,7 +442,7 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 					context.push('/admision/pagoexamen', extra: data);
 				} catch (e) {
 					if (!mounted) return;
-					ScaffoldMessenger.of(context).showSnackBar(
+					messenger.showSnackBar(
 						SnackBar(content: Text('Error al guardar tus datos: $e')),
 					);
 				} finally {
@@ -486,8 +486,8 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 												),
 											),
 											const SizedBox(height: 16),
-											DropdownButtonFormField<String>(
-												value: selectedEstado,
+										DropdownButtonFormField<String>(
+											initialValue: selectedEstado,
 												decoration: const InputDecoration(
 													labelText: 'Estado',
 													prefixIcon: Icon(Icons.map),
@@ -502,8 +502,8 @@ class _BachilleratoScreenState extends State<BachilleratoScreen> {
 												}),
 											),
 											const SizedBox(height: 16),
-											DropdownButtonFormField<String>(
-												value: selectedMunicipio,
+										DropdownButtonFormField<String>(
+											initialValue: selectedMunicipio,
 												decoration: const InputDecoration(
 													labelText: 'Municipio',
 													prefixIcon: Icon(Icons.location_city),

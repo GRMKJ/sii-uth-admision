@@ -306,7 +306,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           'Base del concepto: ${_formatCurrency(montoBase)}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onPrimaryContainer.withOpacity(0.8)),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onPrimaryContainer.withValues(alpha: 0.8)),
                         ),
                       ),
                   ],

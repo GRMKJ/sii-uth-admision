@@ -223,6 +223,9 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
   Map<String, dynamic>? data;
   int? _selectedStep;
   bool _updatingStep = false;
+  static const int _uiRejectedStep = -1;
+  static const int _backendRejectedStep = 11; // Keep in sync with backend constant.
+  static const List<int> _stepOptions = [_uiRejectedStep, 1, 2, 3, 4, 5, 6, 7];
 
   @override
   void initState() {
@@ -242,24 +245,27 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     }
     setState(() {
       data = payload;
-      _selectedStep = (payload?['progress_step'] as num?)?.toInt();
+      final backendStep = (payload?['progress_step'] as num?)?.toInt();
+      _selectedStep = _mapBackendStepToUi(backendStep);
     });
   }
 
   Future<void> _updateProgressStep() async {
-    final newStep = _selectedStep;
-    final currentStep = (data?['progress_step'] as num?)?.toInt();
-    if (newStep == null || newStep == currentStep) {
+    final newStepUiValue = _selectedStep;
+    final currentBackendStep = (data?['progress_step'] as num?)?.toInt();
+    final currentUiStep = _mapBackendStepToUi(currentBackendStep);
+    if (newStepUiValue == null || newStepUiValue == currentUiStep) {
       return;
     }
 
     setState(() => _updatingStep = true);
     try {
       final token = await const FlutterSecureStorage().read(key: 'auth_token');
+      final payloadStep = _mapUiStepToBackend(newStepUiValue);
       final res = await ApiClient.postJson(
         '/admin/aspirantes/${widget.aspiranteId}/progress',
         token: token,
-        body: {'step': newStep},
+        body: {'step': payloadStep},
       );
       Map<String, dynamic>? updated;
       final rawData = res['data'];
@@ -270,7 +276,8 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
       if (!mounted) return;
       setState(() {
         data = updated ?? data;
-        _selectedStep = (updated?['progress_step'] as num?)?.toInt() ?? newStep;
+        final updatedBackendStep = (updated?['progress_step'] as num?)?.toInt();
+        _selectedStep = _mapBackendStepToUi(updatedBackendStep) ?? newStepUiValue;
         _updatingStep = false;
       });
 
@@ -359,7 +366,7 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
                   _infoLine(context, 'Correo', asp['email'] ?? 'No proporcionado'),
                   _infoLine(context, 'Teléfono', asp['telefono'] ?? 'No proporcionado'),
                   _infoLine(context, 'Promedio general', (asp['promedio_general'] ?? 'N/D').toString()),
-                  _infoLine(context, 'Paso actual', '${asp['progress_step'] ?? '-'}'),
+                  _infoLine(context, 'Paso actual', _displayStepLabelFromBackend((asp['progress_step'] as num?)?.toInt())),
                   _infoLine(context, 'Fecha de registro', asp['fecha_registro'] ?? 'N/D'),
                   const SizedBox(height: 16),
                   _buildStepControl(context, asp),
@@ -375,10 +382,10 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
   }
 
   Widget _buildStepControl(BuildContext context, Map<String, dynamic> asp) {
-    const stepOptions = [-1, 1, 2, 3, 4, 5, 6, 7];
     final theme = Theme.of(context);
-    final currentStep = (asp['progress_step'] as num?)?.toInt();
-    final dropdownValue = _selectedStep ?? currentStep;
+    final backendStep = (asp['progress_step'] as num?)?.toInt();
+    final currentUiStep = _mapBackendStepToUi(backendStep);
+    final dropdownValue = _selectedStep ?? currentUiStep;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,13 +393,13 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
         Text('Control de workflow', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          value: dropdownValue,
+          initialValue: dropdownValue,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Paso del aspirante',
             border: OutlineInputBorder(),
           ),
-          items: stepOptions
+          items: _stepOptions
               .map((step) => DropdownMenuItem<int>(
                     value: step,
                     child: Text(_stepLabel(step)),
@@ -404,7 +411,7 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.icon(
-            onPressed: (_updatingStep || !_stepChangePending(currentStep)) ? null : _updateProgressStep,
+            onPressed: (_updatingStep || !_stepChangePending(backendStep)) ? null : _updateProgressStep,
             icon: _updatingStep
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.sync_alt_outlined),
@@ -607,16 +614,18 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     );
   }
 
-  bool _stepChangePending(int? currentStep) {
+  bool _stepChangePending(int? backendStep) {
     final target = _selectedStep;
     if (target == null) return false;
-    return target != currentStep;
+    final currentUi = _mapBackendStepToUi(backendStep);
+    return target != currentUi;
   }
 
   String _stepLabel(int step) {
-    switch (step) {
-      case -1:
-        return 'Rechazado (-1)';
+    final normalizedStep = step == _backendRejectedStep ? _uiRejectedStep : step;
+    switch (normalizedStep) {
+      case _uiRejectedStep:
+        return 'Rechazado';
       case 1:
         return '1 - Registro';
       case 2:
@@ -632,8 +641,27 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
       case 7:
         return '7 - Alumno activo';
       default:
-        return 'Paso $step';
+        return 'Paso $normalizedStep';
     }
+  }
+
+  String _displayStepLabelFromBackend(int? backendStep) {
+    if (backendStep == null) {
+      return 'N/D';
+    }
+    final uiStep = _mapBackendStepToUi(backendStep) ?? backendStep;
+    return _stepLabel(uiStep);
+  }
+
+  int? _mapBackendStepToUi(int? backendStep) {
+    if (backendStep == null) {
+      return null;
+    }
+    return backendStep == _backendRejectedStep ? _uiRejectedStep : backendStep;
+  }
+
+  int _mapUiStepToBackend(int uiStep) {
+    return uiStep == _uiRejectedStep ? _backendRejectedStep : uiStep;
   }
 
   Color _placeholderColor(String genero) {
@@ -652,6 +680,7 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     bool copiaFisico = false;
     bool savingPosesion = false;
     bool requestingReplacement = false;
+    bool manualValidating = false;
 
     await showDialog<void>(
       context: context,
@@ -754,19 +783,30 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  final comentario = await _promptManualValidationComment(context, doc);
-                                  if (comentario == null) return;
-                                  _manualValidateDocument(
-                                    context,
-                                    doc,
-                                    originalFisico,
-                                    copiaFisico,
-                                    comentario,
-                                  );
-                                },
-                                icon: const Icon(Icons.verified_user_outlined),
-                                label: const Text('Validación manual'),
+                                onPressed: manualValidating
+                                    ? null
+                                    : () async {
+                                        final comentario = await _promptManualValidationComment(context, doc);
+                                        if (comentario == null || !dialogContext.mounted) return;
+                                        setStateDialog(() => manualValidating = true);
+                                        await _manualValidateDocument(
+                                          context,
+                                          doc,
+                                          originalFisico,
+                                          copiaFisico,
+                                          comentario,
+                                        );
+                                        if (!dialogContext.mounted) return;
+                                        setStateDialog(() => manualValidating = false);
+                                      },
+                                icon: manualValidating
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : const Icon(Icons.verified_user_outlined),
+                                label: Text(manualValidating ? 'Validando…' : 'Validación manual'),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -867,7 +907,7 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -995,22 +1035,58 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     }
   }
 
-  void _manualValidateDocument(
+  Future<void> _manualValidateDocument(
     BuildContext hostContext,
     Map<String, dynamic> doc,
     bool originalFisico,
     bool copiaFisico,
     String comentario,
-  ) {
+  ) async {
     final messenger = ScaffoldMessenger.of(hostContext);
-    final nombreDoc = doc['nombre']?.toString() ?? 'Documento';
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          'Validación manual registrada para $nombreDoc · Original: ${originalFisico ? 'Sí' : 'No'}, Copia: ${copiaFisico ? 'Sí' : 'No'} · Comentario: $comentario',
+    final docId = _resolveDocumentId(doc);
+    if (docId == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No se pudo identificar el documento para validar.')),
+      );
+      return;
+    }
+
+    try {
+      final token = await const FlutterSecureStorage().read(key: 'auth_token');
+      if (token == null || token.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Sesión no válida. Vuelve a iniciar sesión.')),
+        );
+        return;
+      }
+
+      final response = await ApiClient.postJson(
+        '/admin/documentos/$docId/validar-manual',
+        token: token,
+        body: {
+          'comentario': comentario,
+          'original_fisico': originalFisico,
+          'copia_fisico': copiaFisico,
+        },
+      );
+
+      final nombreDoc = doc['nombre']?.toString() ?? 'Documento';
+      if (mounted) {
+        await _fetchDetalle();
+      }
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            response['message']?.toString() ?? 'Validación manual registrada para $nombreDoc.',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Error al validar manualmente: $e')),
+      );
+    }
   }
 
   Future<String?> _promptManualValidationComment(

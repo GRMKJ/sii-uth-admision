@@ -17,6 +17,7 @@ import 'package:siiadmision/admision/admision_payment_status.dart';
 import 'package:siiadmision/login/reset_password_screen.dart';
 import 'package:siiadmision/theme/theme.dart';
 import 'package:siiadmision/widgets/sidebar.dart';
+import 'package:siiadmision/widgets/connectivity_banner.dart';
 import 'package:siiadmision/alumno/alumno_inicio.dart';
 import 'package:siiadmision/layout/public_layout.dart';
 import 'package:siiadmision/admin/admin_inicio.dart';
@@ -117,7 +118,13 @@ GoRouter _buildRouter(String initialLocation) {
         ),
         GoRoute(path: '/admision/pagoexamen/status', builder: (_, __) => const PaymentStatusScreen()),
         GoRoute(path: '/admision/documentos', builder: (_, __) => const DocumentosScreen()),
-        GoRoute(path: '/admision/documentos/subida', builder: (_, __) => const UploadDocumentsScreen()),
+        GoRoute(
+          path: '/admision/documentos/subida',
+          builder: (_, state) => UploadDocumentsScreen(
+            sessionIdFromQuery: state.uri.queryParameters['session_id'],
+            statusFromQuery: state.uri.queryParameters['status'],
+          ),
+        ),
         GoRoute(path: '/admision/documentos/estado', builder: (_, __) => const DocumentosStatusScreen()),
         GoRoute(path: '/ajustes', builder: (_, __) => const SettingsScreen()),
       ],
@@ -287,6 +294,9 @@ class MyApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
+          builder: (context, child) => ConnectivityBanner(
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );

@@ -377,7 +377,7 @@ Future<void> handleLogin(BuildContext context, int step) async {
       context.go('/admision/pagoexamen/status');
       break;
     case 5:
-      context.go('/admision/documentos/subida');
+      context.go('/admision/documentos/');
       break;
     case 6:
       context.go('/admision/documentos/estado');

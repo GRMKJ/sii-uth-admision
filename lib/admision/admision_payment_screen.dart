@@ -610,10 +610,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _profileError = e.toString();
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _loadingProfile = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingProfile = false;
+        });
+      }
     }
   }
 
@@ -775,7 +776,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             const SizedBox(height: 8),
             Text(
               description,
-              style: textTheme.bodyMedium?.copyWith(color: onColor.withOpacity(0.9)),
+              style: textTheme.bodyMedium?.copyWith(color: onColor.withValues(alpha: 0.9)),
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -816,7 +817,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     Color? foreground,
   }) {
     final textTheme = Theme.of(context).textTheme;
-    final labelStyle = textTheme.labelSmall?.copyWith(color: foreground?.withOpacity(0.8));
+    final labelStyle = textTheme.labelSmall?.copyWith(color: foreground?.withValues(alpha: 0.8));
     final valueStyle = textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w600,
       color: foreground,
@@ -841,7 +842,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (value == null) return '--';
     final code = (currency ?? 'MXN').toString().toUpperCase();
     final amountText = value.toStringAsFixed(2);
-    return '\$' + amountText + ' ' + code;
+    return '\$$amountText $code';
   }
 
   String _formatTimestamp(dynamic isoString) {
