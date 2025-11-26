@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:siiadmision/utils/file_delivery.dart';
 
 
 class ValidarPagoScreen extends StatelessWidget {
@@ -685,8 +687,9 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        final archivoUrl = (doc['archivo_url'] ?? '').toString();
-        final hasArchivo = archivoUrl.isNotEmpty;
+    final archivoUrl = (doc['archivo_url'] ?? '').toString();
+    final archivoPath = (doc['archivo_pat'] ?? '').toString();
+    final hasArchivo = archivoUrl.isNotEmpty || archivoPath.isNotEmpty;
         final estadoLabel = doc['estado_validacion_texto']?.toString() ?? 'Pendiente';
         final validatorName = _documentValidatorName(doc);
         final ocrNotes = _extractOcrObservations(doc);
@@ -774,7 +777,7 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
                             Expanded(
                               child: FilledButton.icon(
                                 onPressed: hasArchivo
-                                    ? () => _openExternalDocument(dialogContext, archivoUrl)
+                                    ? () => _sendDocumentToClient(dialogContext, doc)
                                     : null,
                                 icon: const Icon(Icons.open_in_new_outlined),
                                 label: const Text('Ver documento'),
@@ -1018,23 +1021,6 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     }
   }
 
-  Future<void> _openExternalDocument(BuildContext context, String url) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('URL del documento no válida.')),
-      );
-      return;
-    }
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('No se pudo abrir el documento.')),
-      );
-    }
-  }
-
   Future<void> _manualValidateDocument(
     BuildContext hostContext,
     Map<String, dynamic> doc,
@@ -1085,6 +1071,59 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Error al validar manualmente: $e')),
+      );
+    }
+  }
+
+  Future<void> _sendDocumentToClient(
+    BuildContext context,
+    Map<String, dynamic> doc,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final docId = _resolveDocumentId(doc);
+    if (docId == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No se pudo identificar el documento.')),
+      );
+      return;
+    }
+
+    try {
+      final token = await const FlutterSecureStorage().read(key: 'auth_token');
+      if (token == null || token.isEmpty) {
+        throw Exception('Sesión no válida. Vuelve a iniciar sesión.');
+      }
+
+      final response = await ApiClient.getJson(
+        '/documentos/$docId/archivo/base64',
+        token: token,
+      );
+      final payload = response['data'];
+      final data = payload is Map<String, dynamic> ? payload : response;
+      final base64Content = data['base64']?.toString();
+      if (base64Content == null || base64Content.isEmpty) {
+        throw Exception('El archivo recuperado está vacío.');
+      }
+
+        final rawName = data['filename']?.toString().trim();
+        final filename = (rawName != null && rawName.isNotEmpty)
+          ? rawName
+          : (doc['nombre']?.toString() ?? 'documento.pdf');
+      final mimeType = data['mime_type']?.toString() ?? 'application/octet-stream';
+      final bytes = base64Decode(base64Content);
+
+      await deliverFileToClient(
+        bytes,
+        filename: filename,
+        mimeType: mimeType,
+      );
+
+      messenger.showSnackBar(
+        SnackBar(content: Text('Documento enviado al cliente: $filename')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo entregar el documento: $e')),
       );
     }
   }

@@ -3,7 +3,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:siiadmision/config/session.dart';
 import 'package:siiadmision/config/theme_controller.dart';
-import 'package:siiadmision/layout/header.dart';
 import 'package:siiadmision/layout/side_navigation.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -28,10 +27,6 @@ class SettingsScreen extends StatelessWidget {
 
           return Column(
             children: [
-              SizedBox(
-                width: contentWidth,
-                child: UthHeader(maxWidth: contentWidth),
-              ),
               const SizedBox(height: 24),
               Expanded(
                 child: Center(
