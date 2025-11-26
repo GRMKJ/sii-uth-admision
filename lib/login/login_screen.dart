@@ -1,7 +1,11 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
+import 'package:siiadmision/config/local_user_store.dart';
 import 'package:siiadmision/config/session.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -22,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
+
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -31,20 +35,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
             return Column(
               children: [
-                const SizedBox(height: 24),
                 Expanded(
                   child: Center(
                     child: Container(
                       width: contentWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: colors.surface,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
-                          BoxShadow(
-                            color: colors.shadow.withOpacity(0.1),
-                            blurRadius: 12,
-                          ),
+                                  BoxShadow(
+                                    color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                    blurRadius: 12,
+                                  ),
                         ],
                       ),
                       child: screenWidth < 640
@@ -138,22 +140,38 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        TextField(
-          controller: _usernameController,
-          decoration: const InputDecoration(
-            labelText: 'Usuario',
-            prefixIcon: Icon(Icons.person_outline),
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Contraseña',
-            prefixIcon: Icon(Icons.lock_outline),
-            border: OutlineInputBorder(),
+        AutofillGroup(
+          child: Column(
+            children: [
+              TextField(
+                controller: _usernameController,
+                textInputAction: TextInputAction.next,
+                keyboardType: TextInputType.emailAddress,
+                textCapitalization: TextCapitalization.none,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.username, AutofillHints.email],
+                onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                decoration: const InputDecoration(
+                  labelText: 'Usuario',
+                  prefixIcon: Icon(Icons.person_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.password],
+                onSubmitted: (_) => _submitLogin(context),
+                decoration: const InputDecoration(
+                  labelText: 'Contraseña',
+                  prefixIcon: Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -173,100 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
               foregroundColor: colors.onPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
             ),
-            onPressed: () async {
-              final identity = _usernameController.text.trim();
-              final password = _passwordController.text;
-
-              if (identity.isEmpty || password.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Usuario y contraseña requeridos"),
-                  ),
-                );
-                return;
-              }
-
-              try {
-                final response = await ApiClient.postJson(
-                  "/auth/login",
-                  body: {"identity": identity, "password": password},
-                );
-
-                if (response["success"] != true) {
-                  throw Exception(response["message"] ?? "Error desconocido");
-                }
-
-                final data = response["data"] as Map<String, dynamic>;
-                final token = data["token"] as String;
-                final user = data["user"] as Map<String, dynamic>;
-                final role = user["role"] as String;
-
-                await storage.write(key: "auth_token", value: token);
-                await storage.write(key: "role", value: role);
-
-                await Session().load();
-
-                // 🔹 Navegar según rol
-                switch (role) {
-                  case "aspirante":
-                    debugPrint("📌 Rol aspirante: buscando progreso...");
-                    final stepResponse = await ApiClient.getJson(
-                      "/aspirantes/progress",
-                      token: token,
-                    );
-
-                    if (stepResponse["success"] == true) {
-                      // El backend puede devolver `step` como int o como String.
-                      dynamic rawStep;
-                      if (stepResponse.containsKey('step')) {
-                        rawStep = stepResponse['step'];
-                      } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
-                        rawStep = (stepResponse['data'] as Map)['step'];
-                      }
-
-                      if (rawStep == null) {
-                        throw Exception('Respuesta inválida: step no encontrado');
-                      }
-
-                      int? step;
-                      if (rawStep is int) {
-                        step = rawStep;
-                      } else if (rawStep is String) {
-                        step = int.tryParse(rawStep);
-                      }
-
-                      if (step == null) {
-                        throw Exception('Valor de step inválido: $rawStep');
-                      }
-
-                      debugPrint("➡️ Progreso detectado: step $step");
-                      // Usa tu función para mandar al paso correcto
-                      handleLogin(context, step);
-                    } else {
-                      throw Exception("No se pudo obtener progreso");
-                    }
-                    break;
-
-                  case "alumno":
-                    debugPrint("➡️ Navegando a /alumno/inicio");
-                    context.go("/alumno/inicio");
-                    break;
-
-                  case "administrativo":
-                    debugPrint("➡️ Navegando a /admin/inicio");
-                    context.go("/admin/inicio");
-                    break;
-
-                  default:
-                    debugPrint("⚠️ Rol desconocido, navegando a /");
-                    context.go("/");
-                }
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error al iniciar sesión: $e")),
-                );
-              }
-            },
+            onPressed: () => _submitLogin(context),
             icon: const Icon(Icons.login),
             label: const Text(
               'Iniciar Sesión',
@@ -277,6 +202,164 @@ class _LoginScreenState extends State<LoginScreen> {
       ],
     );
   }
+
+  Future<void> _submitLogin(BuildContext context) async {
+    final identity = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (identity.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Usuario y contraseña requeridos"),
+        ),
+      );
+      return;
+    }
+
+    try {
+      TextInput.finishAutofillContext();
+      final response = await ApiClient.postJson(
+        "/auth/login",
+        body: {"identity": identity, "password": password},
+      );
+
+      if (response["success"] != true) {
+        throw Exception(response["message"] ?? "Error desconocido");
+      }
+
+      final data = response["data"] as Map<String, dynamic>;
+      final token = data["token"] as String;
+      final user = data["user"] as Map<String, dynamic>;
+      final role = user["role"] as String;
+
+      await storage.write(key: "auth_token", value: token);
+      await storage.write(key: "role", value: role);
+
+      final session = Session();
+      await session.saveIdentity(_buildLocalIdentityPayload(user));
+
+      await session.load();
+
+      switch (role) {
+        case "aspirante":
+          final stepResponse = await ApiClient.getJson(
+            "/aspirantes/progress",
+            token: token,
+          );
+
+          if (stepResponse["success"] == true) {
+            dynamic rawStep;
+            if (stepResponse.containsKey('step')) {
+              rawStep = stepResponse['step'];
+            } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
+              rawStep = (stepResponse['data'] as Map)['step'];
+            }
+
+            if (rawStep == null) {
+              throw Exception('Respuesta inválida: step no encontrado');
+            }
+
+            int? step;
+            if (rawStep is int) {
+              step = rawStep;
+            } else if (rawStep is String) {
+              step = int.tryParse(rawStep);
+            }
+
+            if (step == null) {
+              throw Exception('Valor de step inválido: $rawStep');
+            }
+            handleLogin(context, step);
+          } else {
+            throw Exception("No se pudo obtener progreso");
+          }
+          break;
+
+        case "alumno":
+          context.go("/alumno/inicio");
+          break;
+
+        case "administrativo":
+          context.go("/admin/inicio");
+          break;
+
+        default:
+          context.go("/");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error al iniciar sesión: $e")),
+      );
+    }
+  }
+
+  LocalIdentity _buildLocalIdentityPayload(Map<String, dynamic> user) {
+    final rawRole = (user['role'] as String?) ?? '';
+    final identityMap = _toStringKeyedMap(user['identity']);
+    final name = (user['name'] as String? ?? '').trim();
+
+    return LocalIdentity(
+      role: rawRole,
+      name: name.isEmpty ? 'Usuario' : name,
+      identifier: _resolveIdentifierValue(rawRole, identityMap, user),
+      identifierLabel: _identifierLabelForRole(rawRole),
+    );
+  }
+
+  Map<String, dynamic> _toStringKeyedMap(dynamic value) {
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString().toLowerCase(), val));
+    }
+    return const {};
+  }
+
+  String _resolveIdentifierValue(
+    String role,
+    Map<String, dynamic> identityMap,
+    Map<String, dynamic> user,
+  ) {
+    switch (role) {
+      case 'aspirante':
+        return _stringValue(identityMap['curp']) ?? _stringValue(user['curp']) ?? '';
+      case 'alumno':
+        return _stringValue(identityMap['matricula']) ?? _stringValue(user['matricula']) ?? '';
+      case 'administrativo':
+        return _stringValue(identityMap['numero_empleado']) ??
+            _stringValue(identityMap['num_empleado']) ??
+            _stringValue(user['numero_empleado']) ?? '';
+      default:
+        break;
+    }
+
+    if (identityMap.isNotEmpty) {
+      final first = identityMap.values.first;
+      final candidate = _stringValue(first);
+      if (candidate != null) {
+        return candidate;
+      }
+    }
+
+    return _stringValue(user['identity']) ?? _stringValue(user['id']) ?? '';
+  }
+
+  String _identifierLabelForRole(String role) {
+    switch (role) {
+      case 'aspirante':
+        return 'CURP';
+      case 'alumno':
+        return 'Matrícula';
+      case 'administrativo':
+        return 'Número de empleado';
+      default:
+        return 'Identificador';
+    }
+  }
+
+  String? _stringValue(Object? value) {
+    if (value == null) return null;
+    final text = value.toString().trim();
+    return text.isEmpty ? null : text;
+  }
 }
 
 Future<void> handleLogin(BuildContext context, int step) async {
@@ -285,18 +368,21 @@ Future<void> handleLogin(BuildContext context, int step) async {
       context.go('/admision');
       break;
     case 2:
-      context.go('/admision/pagoexamen');
+      context.go('/admision/bachillerato');
       break;
     case 3:
-      context.go('/admision/pagoexamen/status');
+      context.go('/admision/pagoexamen');
       break;
     case 4:
-      context.go('/admision/documentos/subida');
+      context.go('/admision/pagoexamen/status');
       break;
     case 5:
-      context.go('/admision/documentos/estado');
+      context.go('/admision/documentos/');
       break;
     case 6:
+      context.go('/admision/documentos/estado');
+      break;
+    case 7:
       context.go('/alumno/inicio');
       break;
     default:

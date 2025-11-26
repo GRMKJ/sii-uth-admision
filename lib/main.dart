@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
+import 'package:root_jailbreak_detector/root_jailbreak_detector.dart';
 import 'package:siiadmision/admin/admin_aspirantes.dart';
 import 'package:siiadmision/admision/admision_documents.dart';
 import 'package:siiadmision/admision/admision_status_documents.dart';
@@ -10,23 +11,37 @@ import 'package:siiadmision/admision/admision_upload_documents.dart';
 import 'package:siiadmision/login/login_screen.dart';
 import 'package:siiadmision/login/forgot_password_screen.dart';
 import 'package:siiadmision/admision/admision_screen.dart';
+import 'package:siiadmision/admision/admision_bachillerato.dart';
 import 'package:siiadmision/admision/admision_payment_screen.dart';
 import 'package:siiadmision/admision/admision_payment_status.dart';
+import 'package:siiadmision/login/reset_password_screen.dart';
 import 'package:siiadmision/theme/theme.dart';
-import 'package:siiadmision/layout/side_navigation.dart';
+import 'package:siiadmision/widgets/sidebar.dart';
+import 'package:siiadmision/widgets/connectivity_banner.dart';
 import 'package:siiadmision/alumno/alumno_inicio.dart';
 import 'package:siiadmision/layout/public_layout.dart';
 import 'package:siiadmision/admin/admin_inicio.dart';
 import 'package:siiadmision/admin/admin_aspirantes_detalles.dart';
+import 'package:siiadmision/admin/admin_finanzas.dart';
+import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/session.dart';
+import 'package:siiadmision/config/theme_controller.dart';
+import 'package:siiadmision/settings/settings_screen.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'config/platform_info.dart';
+import 'admision/models/bachillerato_form_data.dart';
+
+late GoRouter _router;
 
 void main() async {
   setUrlStrategy(PathUrlStrategy());
   WidgetsFlutterBinding.ensureInitialized();
   await Session().load(); 
+  await themeController.loadThemeMode();
+
+  final initialLocation = await _resolveInitialLocation();
+  _router = _buildRouter(initialLocation);
 
   // Only run jailbreak detection on real mobile platforms (Android/iOS).
   // The plugin is not implemented on web/desktop and will throw
@@ -37,23 +52,25 @@ void main() async {
 
   if (isMobile) {
     try {
-      if (await FlutterJailbreakDetection.jailbroken == true) {
+      final bool? jailbroken = await RootJailbreakDetector().isRooted();
+      if (jailbroken == true) {
         SystemChannels.platform.invokeMethod('SystemNavigator.pop');
       }
     } on MissingPluginException catch (e) {
-      debugPrint('Jailbreak plugin missing: $e');
+      debugPrint('Root/jailbreak plugin missing: $e');
     } catch (e, st) {
-      debugPrint('Jailbreak detection check failed: $e\n$st');
+      debugPrint('Root/jailbreak detection failed: $e\n$st');
     }
   } else {
     debugPrint('Skipping jailbreak detection: not running on Android/iOS. Platform version: ${PlatformInfo.version}');
   }
 
-  runApp(const MyApp());
+  runApp(MyApp(themeController: themeController));
 }
 
-final GoRouter _router = GoRouter(
-  initialLocation: '/',
+GoRouter _buildRouter(String initialLocation) {
+  return GoRouter(
+  initialLocation: initialLocation,
   redirect: (context, state) {
     final session = Session();
 
@@ -74,8 +91,8 @@ final GoRouter _router = GoRouter(
     ShellRoute( 
       builder: (context, state, child) => PublicLayout(
         key: ValueKey(state.uri.path.isNotEmpty ? state.uri.path : '/'),
-        child: child,
         location: state.uri.path.isNotEmpty ? state.uri.path : '/',
+        child: child,
       ),
       routes: [
         GoRoute(
@@ -87,12 +104,35 @@ final GoRouter _router = GoRouter(
           builder: (context, state) => const ForgotPasswordScreen(),
         ),
         GoRoute(path: '/admision', builder: (_, __) => const AdmissionScreen()),
-        GoRoute(path: '/admision/pagoexamen', builder: (_, __) => const PaymentScreen()),
+        GoRoute(path: '/admision/bachillerato', builder: (_, __) => const BachilleratoScreen()),
+        GoRoute(
+          path: '/admision/pagoexamen',
+          builder: (_, state) {
+            final extra = state.extra;
+            return PaymentScreen(
+              formData: extra is BachilleratoFormData ? extra : null,
+              sessionIdFromQuery: state.uri.queryParameters['session_id'],
+              statusFromQuery: state.uri.queryParameters['status'],
+            );
+          },
+        ),
         GoRoute(path: '/admision/pagoexamen/status', builder: (_, __) => const PaymentStatusScreen()),
         GoRoute(path: '/admision/documentos', builder: (_, __) => const DocumentosScreen()),
-        GoRoute(path: '/admision/documentos/subida', builder: (_, __) => const UploadDocumentsScreen()),
+        GoRoute(
+          path: '/admision/documentos/subida',
+          builder: (_, state) => UploadDocumentsScreen(
+            sessionIdFromQuery: state.uri.queryParameters['session_id'],
+            statusFromQuery: state.uri.queryParameters['status'],
+          ),
+        ),
         GoRoute(path: '/admision/documentos/estado', builder: (_, __) => const DocumentosStatusScreen()),
+        GoRoute(path: '/ajustes', builder: (_, __) => const SettingsScreen()),
       ],
+    ),
+    GoRoute(
+      path: '/reset',
+      name: 'reset',
+      builder: (context, state) => _ResetRouteWrapper(state: state),
     ),
 
     // Rutas privadas de alumno
@@ -100,18 +140,132 @@ final GoRouter _router = GoRouter(
       path: '/alumno/inicio',
       builder: (context, state) => const DashboardAlumnoScreen(),
     ),
+    GoRoute(
+      path: '/alumno/ajustes',
+      builder: (context, state) => const AlumnoSettingsScreen(),
+    ),
 
     // Rutas privadas de admin
     GoRoute(path: '/admin/inicio', builder: (_, __) => const DashboardAdminScreen()),
     GoRoute(path: '/admin/aspirantes', builder: (_, __) => const AspirantesAdminScreen()),
+    GoRoute(path: '/admin/finanzas', builder: (_, __) => const AdminFinanzasScreen()),
+    GoRoute(path: '/admin/ajustes', builder: (_, __) => const AdminSettingsScreen()),
     GoRoute(path: '/admin/aspirante/:referencia/pago', builder: (context, state) => PagoDetalleScreen(referencia: state.pathParameters['referencia']!)),
     GoRoute(path: '/admin/aspirante/:referencia/documentos', builder: (context, state) => VerDocumentosScreen(folio: state.pathParameters['referencia']!)),
     GoRoute(path: '/admin/aspirante/:referencia/inscripcion', builder: (context, state) => AutorizarInscripcionScreen(folio: state.pathParameters['referencia']!)),
   ],
 );
+}
+
+Future<String> _resolveInitialLocation() async {
+  const storage = FlutterSecureStorage();
+  final token = await storage.read(key: 'auth_token');
+  final session = Session();
+
+  if (token == null || token.isEmpty) {
+    return '/';
+  }
+
+  if (session.isAdmin) {
+    return '/admin/inicio';
+  }
+
+  if (session.isAlumno) {
+    return '/alumno/inicio';
+  }
+
+  if (session.isAspirante) {
+    try {
+      final response = await ApiClient.getJson('/aspirantes/progress', token: token);
+      if (response['success'] == true) {
+        final step = _extractProgressStep(response);
+        if (step != null) {
+          return _routeForAspiranteStep(step);
+        }
+      }
+    } catch (_) {
+      // Silently fall back to default admission path
+    }
+    return '/admision';
+  }
+
+  return '/';
+}
+
+int? _extractProgressStep(Map<String, dynamic> stepResponse) {
+  dynamic rawStep;
+  if (stepResponse.containsKey('step')) {
+    rawStep = stepResponse['step'];
+  } else if (stepResponse['data'] is Map && (stepResponse['data'] as Map).containsKey('step')) {
+    rawStep = (stepResponse['data'] as Map)['step'];
+  }
+
+  if (rawStep == null) {
+    return null;
+  }
+
+  if (rawStep is int) {
+    return rawStep;
+  }
+
+  if (rawStep is String) {
+    return int.tryParse(rawStep);
+  }
+
+  return null;
+}
+
+String _routeForAspiranteStep(int step) {
+  switch (step) {
+    case 1:
+      return '/admision';
+    case 2:
+      return '/admision/bachillerato';
+    case 3:
+      return '/admision/pagoexamen';
+    case 4:
+      return '/admision/pagoexamen/status';
+    case 5:
+      return '/admision/documentos/subida';
+    case 6:
+      return '/admision/documentos/estado';
+    case 7:
+      return '/alumno/inicio';
+    default:
+      return '/';
+  }
+}
+
+class _ResetRouteWrapper extends StatelessWidget {
+  final GoRouterState state;
+
+  const _ResetRouteWrapper({
+    required this.state,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final token = state.uri.queryParameters['token'] ?? '';
+    final email = state.uri.queryParameters['email'] ?? '';
+    final role = state.uri.queryParameters['role'] ?? 'desconocido';
+
+    final location = state.uri.path.isNotEmpty ? state.uri.path : '/';
+    final child = (token.isEmpty || email.isEmpty)
+        ? const Center(child: Text('Link de restablecimiento inválido o incompleto'))
+        : ResetPasswordScreen(email: email, token: token, role: role);
+
+    return PublicLayout(
+      key: ValueKey(location),
+      location: location,
+      child: child,
+    );
+  }
+}
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final ThemeController themeController;
+
+  const MyApp({super.key, required this.themeController});
 
   @override
   Widget build(BuildContext context) {
@@ -120,22 +274,31 @@ class MyApp extends StatelessWidget {
     final ThemeData lightTheme = materialTheme.light();
     final ThemeData darkTheme  = materialTheme.dark();
 
-    return MaterialApp.router(
-      routerConfig: _router, // si usas go_router
-      debugShowCheckedModeBanner: false,
-      title: 'SII Admisión',
-      theme: lightTheme,   
-      darkTheme: darkTheme,
-      locale: const Locale('es', 'MX'), // 👈 aquí configuras español
-      supportedLocales: const [
-        Locale('es', 'MX'),
-        Locale('en', 'US'),
-      ],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        return MaterialApp.router(
+          routerConfig: _router,
+          debugShowCheckedModeBanner: false,
+          title: 'SII Admisión',
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeMode: themeController.mode,
+          locale: const Locale('es', 'MX'),
+          supportedLocales: const [
+            Locale('es', 'MX'),
+            Locale('en', 'US'),
+          ],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) => ConnectivityBanner(
+            child: child ?? const SizedBox.shrink(),
+          ),
+        );
+      },
     );
   }
 }
@@ -151,31 +314,52 @@ class ShellLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final useRail = useNavigationRailLayout(context);
+
+    void handleNavigation(int index) {
+      switch (index) {
+        case 0:
+          context.go('/');
+          break;
+        case 1:
+          context.go('/admision');
+          break;
+        case 2:
+          context.go('/uth');
+          break;
+        case 3:
+          context.go('/ajustes');
+          break;
+      }
+    }
+
     return Scaffold(
-      body: Row(
-        children: [
-          SideNavigation(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: (index) {
-              switch (index) {
-                case 0:
-                  context.go('/');
-                  break;
-                case 1:
-                  context.go('/admision');
-                  break;
-                case 2:
-                  context.go('/uth');
-                  break;
-                case 3:
-                  context.go('/settings');
-                  break;
-              }
-            },
-          ),
-          Expanded(child: child),
-        ],
+      bottomNavigationBar: LayoutBuilder(
+        builder: (context, constraints) {
+          final hasRailSpace = constraints.maxWidth >= kNavigationRailBreakpoint;
+          return hasRailSpace
+              ? const SizedBox.shrink()
+              : NavigationBar(
+                  selectedIndex: selectedIndex,
+                  destinations: publicNavigationDestinations,
+                  onDestinationSelected: handleNavigation,
+                );
+        },
       ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigation(
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: handleNavigation,
+                  ),
+                ),
+                Expanded(child: child),
+              ],
+            )
+          : child,
     );
   }
 }

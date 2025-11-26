@@ -1,421 +1,863 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-import 'package:siiadmision/config/aspirante_progress.dart';
-import 'package:siiadmision/config/api_client.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:dropdown_search/dropdown_search.dart';
+import 'package:go_router/go_router.dart';
+import 'package:siiadmision/admision/models/bachillerato_form_data.dart';
+import 'package:siiadmision/config/api_client.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 class PaymentScreen extends StatefulWidget {
-  const PaymentScreen({super.key});
+  const PaymentScreen({
+    super.key,
+    this.formData,
+    this.sessionIdFromQuery,
+    this.statusFromQuery,
+  });
 
+  final BachilleratoFormData? formData;
+  final String? sessionIdFromQuery;
+  final String? statusFromQuery;
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  final _referenceController = TextEditingController();
-  final _bachilleratoCtrl = TextEditingController();
-  final _municipioCtrl = TextEditingController();
-  final _estadoCtrl = TextEditingController();
-  final _promedioCtrl = TextEditingController();
-
-  final storage = FlutterSecureStorage();
-
-  String? _selectedCarrera;
-  List<Map<String, dynamic>> _carreras = [];
-  bool _loadingCarreras = true;
-  String? _errorMessage;
-
-  String? _selectedBachillerato;
-  List<Map<String, dynamic>> _bachilleratos = [];
-  bool _loadingBachilleratos = true;
+  final _storage = const FlutterSecureStorage();
+  bool _launchingStripe = false;
+  Map<String, dynamic>? _stripeStatus;
+  String? _lastSessionId;
+  String? _statusFlag;
+  bool _checkingStripeStatus = false;
+  BachilleratoFormData? _remoteFormData;
+  bool _loadingProfile = false;
+  String? _profileError;
 
   @override
   void initState() {
     super.initState();
-    _fetchCarreras();
-    _fetchBachilleratos();
-  }
-
-  Future<void> _fetchCarreras() async {
-    final token = await storage.read(key: 'auth_token');
-
-    try {
-      final data = await ApiClient.getJson("/catalogos/carreras", token: token);
-
-      final List carrerasData = (data.containsKey("data"))
-          ? data["data"]
-          : data;
-
-      setState(() {
-        _carreras = carrerasData
-            .map((c) => {"id": c["id_carreras"], "nombre": c["carrera"]})
-            .toList();
-        _loadingCarreras = false;
-      });
-    } catch (e) {
-      setState(() {
-        _loadingCarreras = false;
-        _errorMessage =
-            "No se pudieron cargar las carreras. Intenta más tarde.\n$e";
-      });
-    }
+    _initializeFromQuery();
+    _loadAcademicDataIfNeeded();
   }
 
   @override
-  void dispose() {
-    _referenceController.dispose();
-    _bachilleratoCtrl.dispose();
-    _municipioCtrl.dispose();
-    _estadoCtrl.dispose();
-    _promedioCtrl.dispose();
-    super.dispose();
+  void didUpdateWidget(covariant PaymentScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.sessionIdFromQuery != oldWidget.sessionIdFromQuery &&
+        (widget.sessionIdFromQuery ?? '').isNotEmpty) {
+      _lastSessionId = widget.sessionIdFromQuery;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshStripeStatus(widget.sessionIdFromQuery);
+      });
+    }
+    if (widget.statusFromQuery != oldWidget.statusFromQuery) {
+      _statusFlag = widget.statusFromQuery;
+    }
+
+    if (oldWidget.formData != widget.formData && widget.formData == null) {
+      _loadAcademicDataIfNeeded(force: true);
+    }
   }
 
+  void _initializeFromQuery() {
+    _lastSessionId = widget.sessionIdFromQuery;
+    _statusFlag = widget.statusFromQuery;
+    if ((_lastSessionId ?? '').isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _refreshStripeStatus(_lastSessionId);
+      });
+    }
+  }
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return Builder(
-      builder: (context) {
-        return Scaffold(
-          backgroundColor: colors.surfaceContainerLowest,
-          body: Row(
-            children: [
-              Expanded(
-                child: SafeArea(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final screenWidth = constraints.maxWidth;
-                      final margin = screenWidth * 0.05;
-                      final contentWidth = screenWidth.clamp(320.0, 1280.0);
-                      final isMobile = screenWidth < 640;
+    return Scaffold(
+      body: Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final screenWidth = constraints.maxWidth;
+                final contentWidth = screenWidth.clamp(320.0, 1280.0);
+                final isMobile = screenWidth < 640;
 
-                      return Padding(
-                        padding: EdgeInsets.symmetric(horizontal: margin),
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 24),
-                            Expanded(
-                              child: Center(
-                                child: Container(
-                                  width: contentWidth,
-                                  decoration: BoxDecoration(
-                                    color: colors.surface,
-                                    borderRadius: BorderRadius.circular(24),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: colors.shadow.withOpacity(0.1),
-                                        blurRadius: 12,
-                                      ),
-                                    ],
-                                  ),
-                                  child: isMobile
-                                      ? Column(
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.only(
-                                                    topLeft: Radius.circular(
-                                                      24,
-                                                    ),
-                                                    topRight: Radius.circular(
-                                                      24,
-                                                    ),
-                                                  ),
-                                              child: Image.asset(
-                                                'assets/uth_fondo2.jpg',
-                                                fit: BoxFit.cover,
-                                                height: 180,
-                                                width: double.infinity,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: SingleChildScrollView(
-                                                padding: const EdgeInsets.all(
-                                                  24,
-                                                ),
-                                                child: _formContent(context),
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : Row(
-                                          children: [
-                                            Expanded(
-                                              flex: 1,
-                                              child: ClipRRect(
-                                                borderRadius:
-                                                    const BorderRadius.only(
-                                                      topLeft: Radius.circular(
-                                                        24,
-                                                      ),
-                                                      bottomLeft:
-                                                          Radius.circular(24),
-                                                    ),
-                                                child: Image.asset(
-                                                  'assets/uth_fondo2.jpg',
-                                                  fit: BoxFit.cover,
-                                                  height: double.infinity,
-                                                ),
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 2,
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  24,
-                                                ),
-                                                child: _formContent(context),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
+                return Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: Container(
+                          width: contentWidth,
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                blurRadius: 12,
                               ),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
+                            ],
+                          ),
+                          child: isMobile
+                              ? Column(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(24),
+                                        topRight: Radius.circular(24),
+                                      ),
+                                      child: Image.asset(
+                                        'assets/uth_fondo2.jpg',
+                                        fit: BoxFit.cover,
+                                        height: 180,
+                                        width: double.infinity,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        padding: const EdgeInsets.all(24),
+                                        child: _formContent(context),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 1,
+                                      child: ClipRRect(
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(24),
+                                          bottomLeft: Radius.circular(24),
+                                        ),
+                                        child: Image.asset(
+                                          'assets/uth_fondo2.jpg',
+                                          fit: BoxFit.cover,
+                                          height: double.infinity,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: SingleChildScrollView(
+                                        padding: const EdgeInsets.all(32),
+                                        child: _formContent(context),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                         ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: _showHelpDialog,
-            tooltip: 'Ayuda',
-            child: const Icon(Icons.help_outline),
-          ),
-        );
-      },
+        ],
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 16, right: 16),
+        child: FloatingActionButton(
+          onPressed: _showHelpDialog,
+          tooltip: 'Ayuda',
+          child: const Icon(Icons.help_outline),
+        ),
+      ),
     );
   }
 
   Widget _formContent(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final summaryData = widget.formData ?? _remoteFormData;
+    final selectionMissing = summaryData == null;
+    final hasStripeSession = (_lastSessionId ?? '').isNotEmpty;
+    final banner = _statusBanner(context);
 
-    if (_loadingCarreras || _loadingBachilleratos) {
-      return const Center(child: CircularProgressIndicator());
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Pago de examen',
+          style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Confirma tus datos y elige cómo realizar tu pago. Puedes iniciar un cobro seguro con Stripe o acudir a ventanilla.',
+          style: textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 16),
+        if (banner != null) ...[
+          banner,
+          const SizedBox(height: 16),
+        ],
+        _buildSummarySection(context, summaryData),
+        if (hasStripeSession) ...[
+          const SizedBox(height: 16),
+          _stripeStatusCard(context),
+        ],
+        const SizedBox(height: 24),
+        _paymentOptions(context, selectionMissing),
+      ],
+    );
+  }
+
+  Widget _buildSummarySection(BuildContext context, BachilleratoFormData? summaryData) {
+    if (summaryData != null) {
+      return _selectionSummaryCard(context, summaryData);
     }
 
-    if (_errorMessage != null) {
-      return Center(
-        child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+    if (_loadingProfile) {
+      return _loadingSummaryCard(context);
+    }
+
+    if (_profileError != null) {
+      return _summaryErrorCard(context);
+    }
+
+    return _missingSelectionCard(context);
+  }
+
+  Widget _loadingSummaryCard(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(color: colors.primary),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Text('Recuperando tus datos guardados…'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryErrorCard(BuildContext context) {
+    return Card(
+      color: Theme.of(context).colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'No pudimos recuperar tus datos',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(_profileError ?? 'Error desconocido'),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _loadingProfile ? null : () => _loadAcademicDataIfNeeded(force: true),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reintentar'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _missingSelectionCard(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      color: colors.errorContainer,
+      child: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Falta información',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Antes de registrar tu pago debes elegir tu bachillerato de procedencia y la carrera a la que deseas aplicar.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _selectionSummaryCard(BuildContext context, BachilleratoFormData data) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      color: colors.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Resumen de selección',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.school),
+              title: const Text('Bachillerato'),
+              subtitle: Text(data.bachilleratoDescripcion ?? data.bachilleratoId),
+            ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.school_outlined),
+              title: const Text('Carrera'),
+              subtitle: Text(data.carreraNombre ?? data.carreraId),
+            ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.grade),
+              title: const Text('Promedio general'),
+              subtitle: Text(data.promedio),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _paymentOptions(BuildContext context, bool selectionMissing) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          color: colors.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.credit_card, size: 28, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Opción 1: Pago en línea (Stripe)",
+                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20, thickness: 1),
+                const Text("Paga con tarjeta de crédito o débito mediante Stripe."),
+                const SizedBox(height: 8),
+                Text(
+                  "Stripe aplica una comisión del 3.6 % sobre el monto de \$500.00, la cual se suma automáticamente antes de confirmar tu pago.",
+                  style: textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Después de completar el pago recibirás tu comprobante digital y podrás continuar con el registro sin acudir a la universidad.",
+                  style: textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: selectionMissing
+                      ? FilledButton(
+                          onPressed: () => context.go('/admision/bachillerato'),
+                          child: const Text('Capturar datos previos'),
+                        )
+                      : FilledButton.icon(
+                          onPressed: _launchingStripe ? null : _startStripePayment,
+                          icon: _launchingStripe
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colors.onPrimary,
+                                  ),
+                                )
+                              : const Icon(Icons.credit_card),
+                          label: Text(_launchingStripe ? 'Conectando…' : 'Pagar en Stripe (3.6 %)'),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.storefront, size: 28, color: colors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Opción 2: Pago en ventanilla",
+                        style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const Divider(height: 20, thickness: 1),
+                const Text(
+                  "Acude a la caja del edificio A de la Universidad Tecnológica de Huejotzingo para cubrir la cuota de \$500.00.",
+                ),
+                const SizedBox(height: 8),
+                const Text("Lleva tu identificación y solicita registrar tu pago del examen de admisión."),
+                const SizedBox(height: 8),
+                const Text('Conserva tu comprobante sellado para seguimiento y validación en el sistema.'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _startStripePayment() async {
+    final data = widget.formData ?? _remoteFormData;
+    if (data == null) {
+      if (!_loadingProfile) {
+        _loadAcademicDataIfNeeded(force: true);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completa primero tus datos de bachillerato.')),
+      );
+      context.go('/admision/bachillerato');
+      return;
+    }
+
+    setState(() => _launchingStripe = true);
+    try {
+      final token = await _storage.read(key: 'auth_token');
+      final response = await ApiClient.postJson(
+        '/pagos/stripe/session',
+        token: token,
+        body: {
+        },
+      );
+      final payload = _unwrapResponse(response);
+      final checkoutUrl = _extractCheckoutUrl(payload);
+      if (checkoutUrl == null) {
+        throw Exception('No se recibió el enlace de Stripe.');
+      }
+      final createdSessionId = payload['session_id'] as String?;
+      if (createdSessionId != null && mounted) {
+        setState(() {
+          _lastSessionId = createdSessionId;
+          _stripeStatus = null;
+          _statusFlag = null;
+        });
+      }
+      final launched = await launchUrlString(
+        checkoutUrl,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        throw Exception('No se pudo abrir la ventana de pago.');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Stripe se abrió en otra ventana. Completa el pago y regresa para consultar el estado.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo iniciar el pago: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _launchingStripe = false);
+    }
+  }
+
+  String? _extractCheckoutUrl(Map<String, dynamic> payload) {
+    final candidates = <String?>[
+      payload['url'] as String?,
+      payload['checkout_url'] as String?,
+      payload['redirect_url'] as String?,
+      payload['checkoutUrl'] as String?,
+    ];
+    final data = payload['data'];
+    if (data is Map<String, dynamic>) {
+      candidates.addAll([
+        data['url'] as String?,
+        data['checkout_url'] as String?,
+        data['redirect_url'] as String?,
+        data['checkoutUrl'] as String?,
+      ]);
+    }
+    for (final candidate in candidates) {
+      if (candidate != null && candidate.isNotEmpty) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _unwrapResponse(Map<String, dynamic> payload) {
+    final data = payload['data'];
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    return payload;
+  }
+
+  Future<void> _refreshStripeStatus([String? sessionId]) async {
+    final targetSession = (sessionId ?? _lastSessionId);
+    if (targetSession == null || targetSession.isEmpty) {
+      return;
+    }
+
+    final wasPaid = _asInt(_stripeStatus?['estado_validacion']) == 1;
+
+    setState(() => _checkingStripeStatus = true);
+    try {
+      final token = await _storage.read(key: 'auth_token');
+      final response = await ApiClient.getJson('/pagos/stripe/session/$targetSession', token: token);
+      final data = _unwrapResponse(response);
+      final nowPaid = _asInt(data['estado_validacion']) == 1;
+
+      if (!mounted) return;
+      setState(() {
+        _stripeStatus = data;
+        _lastSessionId = data['session_id'] as String? ?? targetSession;
+        if (nowPaid) {
+          _statusFlag = 'success';
+        }
+      });
+
+      if (nowPaid && !wasPaid && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pago confirmado. Puedes continuar con tus documentos.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo verificar tu pago: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _checkingStripeStatus = false);
+      }
+    }
+  }
+
+  Future<void> _loadAcademicDataIfNeeded({bool force = false}) async {
+    if (!force) {
+      if (widget.formData != null || _remoteFormData != null || _loadingProfile) {
+        return;
+      }
+    } else if (_loadingProfile) {
+      return;
+    }
+
+    final token = await _storage.read(key: 'auth_token');
+    if (token == null) {
+      if (mounted) {
+        setState(() {
+          _profileError = 'No se encontró la sesión. Inicia sesión nuevamente.';
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _loadingProfile = true;
+        if (force) {
+          _profileError = null;
+        }
+      });
+    }
+
+    try {
+      final response = await ApiClient.getJson('/aspirantes/me', token: token);
+      final payload = _unwrapResponse(response);
+      final fetched = _mapAspiranteToFormData(payload);
+      if (!mounted) return;
+      setState(() {
+        _remoteFormData = fetched;
+        if (fetched != null) {
+          _profileError = null;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _profileError = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingProfile = false;
+        });
+      }
+    }
+  }
+
+  BachilleratoFormData? _mapAspiranteToFormData(Map<String, dynamic>? payload) {
+    if (payload == null) return null;
+    final bach = _asMap(payload['bachillerato']);
+    final carrera = _asMap(payload['carrera']);
+    final String? bachId = bach?['id']?.toString() ?? bach?['id_bachillerato']?.toString();
+    final String? carreraId = carrera?['id']?.toString() ?? carrera?['id_carreras']?.toString();
+    final promedioRaw = payload['promedio_general'];
+
+    if (bachId == null || carreraId == null) {
+      return null;
+    }
+
+    return BachilleratoFormData(
+      bachilleratoId: bachId,
+      bachilleratoDescripcion: _formatBachilleratoDescripcion(bach),
+      carreraId: carreraId,
+      carreraNombre: carrera?['carrera']?.toString(),
+      promedio: promedioRaw?.toString() ?? '--',
+    );
+  }
+
+  Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, dynamic val) => MapEntry(key.toString(), val));
+    }
+    return null;
+  }
+
+  String? _formatBachilleratoDescripcion(Map<String, dynamic>? bach) {
+    if (bach == null) return null;
+    final nombre = bach['nombre']?.toString();
+    if (nombre == null) return null;
+    final municipio = bach['municipio']?.toString();
+    final estado = bach['estado']?.toString();
+    if (municipio == null || estado == null) {
+      return nombre;
+    }
+    return '$nombre ($municipio, $estado)';
+  }
+
+  Widget? _statusBanner(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final status = _statusFlag;
+    final paid = _asInt(_stripeStatus?['estado_validacion']) == 1;
+
+    if (status == 'cancelled') {
+      return _buildBanner(
+        background: colors.errorContainer,
+        foreground: colors.onErrorContainer,
+        icon: Icons.warning_amber_rounded,
+        title: 'Pago cancelado',
+        body: 'Cancelaste la operación en Stripe. Puedes intentarlo de nuevo cuando estés listo.',
       );
     }
 
-    return SingleChildScrollView(
-      // 🔹 Aquí envolvemos todo para evitar overflow
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Admisión 2025',
-            style: textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Antes de continuar, necesitamos los datos de tu Bachillerato de procedencia:',
-          ),
-          const SizedBox(height: 16),
+    if (status == 'success' && !paid) {
+      return _buildBanner(
+        background: colors.surfaceContainerHighest,
+        foreground: colors.onSurfaceVariant,
+        icon: Icons.hourglass_bottom,
+        title: 'Regresaste de Stripe',
+        body: 'Estamos esperando la confirmación final. Pulsa "Verificar mi pago" para actualizar el estado.',
+      );
+    }
 
-          DropdownSearch<Map<String, dynamic>>(
-            items: [
-              ..._bachilleratos,
-              {
-                "id": "otro",
-                "nombre": "➕ Otro (Agregar nuevo)",
-              }, // 👈 añadimos opción "Otro"
-            ],
-            selectedItem: _bachilleratos.firstWhere(
-              (b) => b['id'].toString() == _selectedBachillerato,
-              orElse: () => <String, dynamic>{},
-            ),
-            itemAsString: (Map<String, dynamic>? item) {
-              if (item == null) return "";
-              final nombre = item["nombre"];
-              return nombre != null ? nombre.toString() : "";
-            },
-            onChanged: (value) async {
-              if (value?["id"] == "otro") {
-                final nuevo = await _showAddBachilleratoDialog();
-                if (nuevo != null) {
-                  setState(() {
-                    // 👇 añadimos con el mismo formato que el API
-                    final nuevoBachillerato = {
-                      "id": nuevo["id_bachillerato"].toString(),
-                      "nombre":
-                          "${nuevo["nombre"]} (${nuevo["municipio"]}, ${nuevo["estado"]})",
-                    };
-                    _bachilleratos.add(nuevoBachillerato);
+    if (paid && status != 'success') {
+      return _buildBanner(
+        background: colors.tertiaryContainer,
+        foreground: colors.onTertiaryContainer,
+        icon: Icons.verified,
+        title: 'Pago validado',
+        body: 'Tu pago fue reconocido correctamente. En breve podrás avanzar al siguiente paso.',
+      );
+    }
 
-                    // 👇 seleccionamos inmediatamente el nuevo
-                    _selectedBachillerato = nuevoBachillerato["id"];
-                  });
-                }
-              } else {
-                setState(() {
-                  _selectedBachillerato = value?["id"]?.toString();
-                });
-              }
-            },
+    return null;
+  }
 
-            dropdownDecoratorProps: const DropDownDecoratorProps(
-              dropdownSearchDecoration: InputDecoration(
-                labelText: "Bachillerato",
-                prefixIcon: Icon(Icons.school),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            popupProps: const PopupProps.menu(showSearchBox: true),
-          ),
-
-          const SizedBox(height: 12),
-
-          TextField(
-            controller: _promedioCtrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Promedio General',
-              prefixIcon: Icon(Icons.grade),
-              border: OutlineInputBorder(),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // 🔹 Card con datos de depósito
-          Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            color: Theme.of(context).colorScheme.surfaceVariant,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
+  Widget _buildBanner({
+    required Color background,
+    required Color foreground,
+    required IconData icon,
+    required String title,
+    required String body,
+  }) {
+    return Card(
+      color: background,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: foreground),
+            const SizedBox(width: 12),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Row(
-                    children: [
-                      Icon(Icons.account_balance, size: 28),
-                      SizedBox(width: 8),
-                      Text(
-                        'Datos de Depósito',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Divider(height: 20, thickness: 1),
-                  Text('Banco: SANTANDER'),
-                  Text('Nombre: UNIVERSIDAD TECNOLÓGICA DE HUEJOTZINGO'),
-                  Text('Número de Cuenta: 6551 0840 686'),
-                  Text('CLABE: 0146 5065 5108 4068 63'),
-                  Text('Cantidad: 500.00'),
-                  SizedBox(height: 8),
-                  Text(
-                    'NOTA: Verifique y realice correctamente su pago ya que no aplica devolución o reembolso por cualquier motivo.',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: foreground)),
+                  const SizedBox(height: 4),
+                  Text(body, style: TextStyle(color: foreground)),
                 ],
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          const SizedBox(height: 24),
-          const Text('Selecciona la carrera a la que deseas aplicar:'),
-          const SizedBox(height: 8),
+  Widget _stripeStatusCard(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final status = _stripeStatus;
+    final sessionId = _lastSessionId ?? '--';
+    final hasData = status != null;
+    final paid = hasData && _asInt(status['estado_validacion']) == 1;
+    final cardColor = paid ? colors.tertiaryContainer : colors.surfaceContainerHighest;
+    final icon = paid ? Icons.task_alt : Icons.receipt_long;
+    final onColor = paid ? colors.onTertiaryContainer : colors.onSurface;
 
-          DropdownButtonFormField<String>(
-            value: _selectedCarrera,
-            items: _carreras
-                .map(
-                  (carrera) => DropdownMenuItem<String>(
-                    value: carrera["id"].toString(),
-                    child: Text(
-                      carrera["nombre"],
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
+    final resolvedStatus = status ?? const <String, dynamic>{};
+    final reference = (resolvedStatus['referencia'] as String?) ?? 'En proceso';
+    final amount = hasData ? _formatCurrency(resolvedStatus['monto_pagado'], resolvedStatus['currency']) : '--';
+    final updated = hasData ? _formatTimestamp(resolvedStatus['updated_at']) : '--';
+
+    final description = hasData
+        ? (paid
+            ? 'Stripe confirmó tu pago y lo asignó a tu expediente.'
+            : 'Stripe recibió tu solicitud y está validándola con el banco. Puede tardar un par de minutos.')
+        : 'Regresaste del portal de Stripe. Verifica tu sesión para conocer el resultado.';
+
+    return Card(
+      color: cardColor,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: onColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    paid ? 'Pago confirmado' : 'Pago en validación',
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: onColor,
                     ),
                   ),
-                )
-                .toList(),
-            decoration: const InputDecoration(
-              labelText: 'Carrera',
-              prefixIcon: Icon(Icons.school_outlined),
-              border: OutlineInputBorder(),
+                ),
+              ],
             ),
-            onChanged: (value) => setState(() => _selectedCarrera = value),
-            isExpanded: true,
-          ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: textTheme.bodyMedium?.copyWith(color: onColor.withValues(alpha: 0.9)),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 24,
+              runSpacing: 12,
+              children: [
+                _statusMetric(context, label: 'ID de sesión', value: sessionId, foreground: onColor),
+                _statusMetric(context, label: 'Referencia', value: reference, foreground: onColor),
+                _statusMetric(context, label: 'Monto pagado', value: amount, foreground: onColor),
+                _statusMetric(context, label: 'Última actualización', value: updated, foreground: onColor),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: _checkingStripeStatus ? null : () => _refreshStripeStatus(),
+                icon: _checkingStripeStatus
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: onColor),
+                      )
+                    : const Icon(Icons.refresh),
+                label: Text(_checkingStripeStatus ? 'Verificando…' : 'Verificar mi pago'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          const SizedBox(height: 16),
-          const Text(
-            'Una vez realizado el pago, registra tu referencia de pago',
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _referenceController,
-            decoration: const InputDecoration(
-              labelText: 'Referencia de Pago',
-              prefixIcon: Icon(Icons.confirmation_number),
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 24),
+  Widget _statusMetric(
+    BuildContext context, {
+    required String label,
+    required String value,
+    Color? foreground,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    final labelStyle = textTheme.labelSmall?.copyWith(color: foreground?.withValues(alpha: 0.8));
+    final valueStyle = textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: foreground,
+    );
 
-          Align(
-            alignment: Alignment.bottomRight,
-            child: FilledButton(
-              onPressed: _submitForm,
-              child: const Text('Siguiente'),
-            ),
-          ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 160),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: labelStyle),
+          const SizedBox(height: 4),
+          SelectableText(value, style: valueStyle),
         ],
       ),
     );
   }
 
-  Future<void> _submitForm() async {
-    if (_referenceController.text.isEmpty ||
-        _selectedCarrera == null ||
-        _selectedBachillerato == null || // 👈 usamos variable de selección
-        _promedioCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa todos los campos obligatorios')),
-      );
-      return;
-    }
+  String _formatCurrency(dynamic amount, dynamic currency) {
+    if (amount == null) return '--';
+    final double? value = amount is num ? amount.toDouble() : double.tryParse(amount.toString());
+    if (value == null) return '--';
+    final code = (currency ?? 'MXN').toString().toUpperCase();
+    final amountText = value.toStringAsFixed(2);
+    return '\$$amountText $code';
+  }
 
-    try {
-      final token = await storage.read(key: 'auth_token');
+  String _formatTimestamp(dynamic isoString) {
+    if (isoString == null) return '--';
+    final date = DateTime.tryParse(isoString.toString());
+    if (date == null) return '--';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(date.day)}/${two(date.month)}/${date.year} ${two(date.hour)}:${two(date.minute)}';
+  }
 
-
-      await ApiClient.postJson(
-        "/aspirantes/pago",
-        token: token,
-        body: {
-          "bachillerato_id": _selectedBachillerato,
-          "promedio": _promedioCtrl.text,
-          "carrera_id": _selectedCarrera,
-          "referencia": _referenceController.text,
-        },
-      );
-
-      _showConfirmationDialog();
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error al registrar: $e")));
-    }
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   void _showHelpDialog() {
@@ -459,235 +901,5 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Future<void> _fetchBachilleratos() async {
-    final token = await storage.read(key: 'auth_token');
-    try {
-      final response = await ApiClient.getJson(
-        "/catalogos/bachilleratos",
-        token: token,
-      );
 
-      final List<dynamic> lista = response["data"]; // 👈 aquí tomamos el array
-
-      setState(() {
-        _bachilleratos = lista
-            .map(
-              (b) => {
-                "id":
-                    b["id"], // ⚠️ en tu respuesta viene "id", no "id_bachillerato"
-                "nombre": "${b["nombre"]} (${b["municipio"]}, ${b["estado"]})",
-              },
-            )
-            .toList();
-        _loadingBachilleratos = false;
-      });
-    } catch (e) {
-      setState(() {
-        _loadingBachilleratos = false;
-      });
-    }
-  }
-
-  void _showConfirmationDialog() {
-    bool accepted = false;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              contentPadding: const EdgeInsets.all(24),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.receipt_long_rounded, size: 48),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Confirmación de Pago',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Como confirmación de este paso, 5 días hábiles posteriores debes recibir\ncorreo electrónico de confirmación de pre registro con\nla instrucción para registro al examen de admisión.\n\nDe lo contrario, comunícate a:',
-                    textAlign: TextAlign.justify,
-                  ),
-                  const SizedBox(height: 8),
-                  const SelectableText('aspirante@uth.edu.mx'),
-                  const Text('Tels. 227 275 9311'),
-                  const Text('Tels. 227 275 9313'),
-                  const SizedBox(height: 16),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Acepto que los datos proporcionados son correctos',
-                    ),
-                    value: accepted,
-                    onChanged: (val) => setState(() => accepted = val ?? false),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar'),
-                ),
-                FilledButton(
-                  onPressed: accepted
-                      ? () {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Registro confirmado'),
-                            ),
-                          );
-                          ProgressService.saveStep(3);
-                          context.push('/admision/pagoexamen/status');
-                        }
-                      : null,
-                  child: const Text('Acepto'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<Map<String, dynamic>?> _showAddBachilleratoDialog() async {
-    final nombreCtrl = TextEditingController();
-    String? selectedEstado;
-    String? selectedMunicipio;
-
-    // 🔹 Datos simulados (reemplázalos por API si ya tienes endpoint)
-    final estados = ["Puebla", "Tlaxcala", "CDMX"];
-    final municipios = {
-      "Puebla": ["Huejotzingo", "San Martín", "Cholula", "Puebla"],
-      "Tlaxcala": ["Apizaco", "Huamantla"],
-      "CDMX": ["Coyoacán", "Iztapalapa"],
-    };
-
-    return await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: const Text("Agregar Bachillerato"),
-              content: SizedBox(
-                width:
-                    MediaQuery.of(context).size.width * 0.85, // 👈 ancho mayor
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: nombreCtrl,
-                        decoration: const InputDecoration(
-                          labelText: "Nombre",
-                          prefixIcon: Icon(Icons.school),
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: selectedEstado,
-                        decoration: const InputDecoration(
-                          labelText: "Estado",
-                          prefixIcon: Icon(Icons.map),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: estados
-                            .map(
-                              (e) => DropdownMenuItem(value: e, child: Text(e)),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            selectedEstado = val;
-                            selectedMunicipio = null; // reset al cambiar estado
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: selectedMunicipio,
-                        decoration: const InputDecoration(
-                          labelText: "Municipio",
-                          prefixIcon: Icon(Icons.location_city),
-                          border: OutlineInputBorder(),
-                        ),
-                        items:
-                            (selectedEstado != null
-                                    ? municipios[selectedEstado] ?? []
-                                    : [])
-                                .map(
-                                  (m) => DropdownMenuItem<String>(
-                                    value: m,
-                                    child: Text(m),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            selectedMunicipio = val;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancelar"),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (nombreCtrl.text.isEmpty ||
-                        selectedEstado == null ||
-                        selectedMunicipio == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Completa todos los campos"),
-                        ),
-                      );
-                      return;
-                    }
-
-                    try {
-                      final token = await storage.read(key: 'auth_token');
-                      final nuevo = await ApiClient.postJson(
-                        "/catalogos/bachilleratos",
-                        token: token,
-                        body: {
-                          "nombre": nombreCtrl.text,
-                          "estado": selectedEstado,
-                          "municipio": selectedMunicipio,
-                        },
-                      );
-                      Navigator.pop(context, nuevo["data"]);
-                    } catch (e) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text("Error: $e")));
-                    }
-                  },
-                  child: const Text("Guardar"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 }

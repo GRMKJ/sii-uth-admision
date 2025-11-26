@@ -55,7 +55,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -64,20 +63,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
             return Column(
               children: [
-                const SizedBox(height: 24),
                 Expanded(
                   child: Center(
                     child: Container(
                       width: contentWidth,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
                       decoration: BoxDecoration(
                         color: colors.surface,
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
-                          BoxShadow(
-                            color: colors.shadow.withOpacity(0.1),
-                            blurRadius: 12,
-                          ),
+                                      BoxShadow(
+                                        color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                        blurRadius: 12,
+                                      ),
                         ],
                       ),
                       child: screenWidth < 640
@@ -177,6 +174,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             children: [
               TextFormField(
                 controller: _identityCtrl,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) {
+                  if (!_sending) {
+                    _submit();
+                  }
+                },
                 decoration: const InputDecoration(
                   labelText: 'Identificador',
                   prefixIcon: Icon(Icons.person_outline),
@@ -187,14 +190,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     : null,
               ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: _sending ? null : () => context.go('/'),
-                    child: const Text('Volver al inicio de sesión'),
-                  ),
-                  FilledButton.icon(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final stackButtons = constraints.maxWidth < 420;
+                  final sendButton = FilledButton.icon(
                     onPressed: _sending ? null : _submit,
                     icon: _sending
                         ? const SizedBox(
@@ -204,8 +203,36 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           )
                         : const Icon(Icons.send),
                     label: Text(_sending ? 'Enviando…' : 'Enviar instrucciones'),
-                  ),
-                ],
+                  );
+
+                  if (stackButtons) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: _sending ? null : () => context.go('/'),
+                            child: const Text('Volver al inicio de sesión'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        sendButton,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: _sending ? null : () => context.go('/'),
+                        child: const Text('Volver al inicio de sesión'),
+                      ),
+                      sendButton,
+                    ],
+                  );
+                },
               ),
             ],
           ),

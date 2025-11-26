@@ -30,7 +30,6 @@ class UthHeader extends StatelessWidget {
               height: 50,
             ),
             const SizedBox(width: 12),
-            // 📌 Este Flexible permite al texto usar el espacio restante
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,6 +54,7 @@ class UthHeader extends StatelessWidget {
                 ],
               ),
             ),
+
           ],
         ),
       ),

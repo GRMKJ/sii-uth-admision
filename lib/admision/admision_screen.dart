@@ -1,10 +1,18 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:siiadmision/config/aspirante_progress.dart';
 import 'package:siiadmision/config/api_client.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+enum _FormTier { mobile, compact, wide }
+
+class _AdjustFechaIntent extends Intent {
+  const _AdjustFechaIntent(this.delta);
+  final int delta;
+}
 
 class AdmissionScreen extends StatefulWidget {
   const AdmissionScreen({super.key});
@@ -16,6 +24,10 @@ class AdmissionScreen extends StatefulWidget {
 class _AdmissionScreenState extends State<AdmissionScreen> {
   bool _acceptedConditions = false;
   bool _submitting = false;
+  bool _autoCurpGenerated = false;
+  final TextEditingController _fechaTextCtrl = TextEditingController();
+  final FocusNode _fechaFocusNode = FocusNode();
+  bool _updatingFechaText = false;
 
   // 🔹 Controladores mínimos necesarios para el registro
   final _nombreCtrl = TextEditingController();
@@ -23,11 +35,17 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
   final _apMatCtrl = TextEditingController();
   final _curpCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _telefonoCtrl = TextEditingController();
 
   // 🔹 Campos agregados: sexo, fecha y estado de nacimiento
   String? _sexo; // 'H' o 'M'
   DateTime? _fechaNac;
   String? _estadoNac; // código entidad: 'PL', 'DF', etc.
+  static const Map<String, String> _sexoOptions = {
+    'H': 'Hombre',
+    'M': 'Mujer',
+    'X': 'No binario',
+  };
 
   final _estadosMx = const [
     {'code': 'AS', 'name': 'Aguascalientes'},
@@ -72,10 +90,22 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     _curpCtrl.addListener(() {
       final curp = _curpCtrl.text.trim().toUpperCase();
       if (curp.length == 18 &&
-          RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\$').hasMatch(curp)) {
+          RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$').hasMatch(curp)) {
+        if (_autoCurpGenerated) {
+          setState(() => _autoCurpGenerated = false);
+        }
         _applyFromCurp(curp);
+      } else if (_autoCurpGenerated && curp.length != 18) {
+        setState(() => _autoCurpGenerated = false);
       }
     });
+
+    for (final ctrl in [_nombreCtrl, _apPatCtrl, _apMatCtrl]) {
+      ctrl.addListener(_tryAutoFillCurp);
+    }
+
+    _fechaTextCtrl.addListener(_handleFechaTextChange);
+    _updateFechaTextController();
   }
 
   @override
@@ -85,6 +115,9 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     _apMatCtrl.dispose();
     _curpCtrl.dispose();
     _emailCtrl.dispose();
+    _telefonoCtrl.dispose();
+    _fechaTextCtrl.dispose();
+    _fechaFocusNode.dispose();
     super.dispose();
   }
 
@@ -122,6 +155,136 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
         _estadoNac = estado;
       }
     });
+    _updateFechaTextController();
+  }
+
+  void _tryAutoFillCurp() {
+    final nombre = _nombreCtrl.text.trim();
+    final apPat = _apPatCtrl.text.trim();
+    final apMat = _apMatCtrl.text.trim();
+    final sexo = _sexo;
+    final fecha = _fechaNac;
+    final estado = _estadoNac;
+
+    if (nombre.isEmpty || apPat.isEmpty || apMat.isEmpty) {
+      if (_autoCurpGenerated) {
+        setState(() => _autoCurpGenerated = false);
+      }
+      return;
+    }
+    if (sexo != 'H' && sexo != 'M') {
+      if (_autoCurpGenerated) {
+        setState(() => _autoCurpGenerated = false);
+      }
+      return;
+    }
+    if (fecha == null || estado == null) {
+      if (_autoCurpGenerated) {
+        setState(() => _autoCurpGenerated = false);
+      }
+      return;
+    }
+
+    final generated = generarCurp(
+      nombre: nombre,
+      apPat: apPat,
+      apMat: apMat,
+      sexo: sexo!,
+      fechaNac: fecha,
+      estadoNac: estado,
+    );
+
+    final current = _curpCtrl.text.trim().toUpperCase();
+    if (current == generated) {
+      if (!_autoCurpGenerated) {
+        setState(() => _autoCurpGenerated = true);
+      }
+      return;
+    }
+
+    setState(() {
+      _curpCtrl.value = TextEditingValue(
+        text: generated,
+        selection: TextSelection.collapsed(offset: generated.length),
+      );
+      _autoCurpGenerated = true;
+    });
+  }
+
+  void _handleFechaTextChange() {
+    if (_updatingFechaText) return;
+    final parsed = _parseFechaFromText(_fechaTextCtrl.text);
+    if (parsed != null && parsed != _fechaNac) {
+      setState(() => _fechaNac = parsed);
+      _tryAutoFillCurp();
+    }
+  }
+
+  void _updateFechaTextController() {
+    final text = _fechaNac == null
+        ? ''
+        : '${_fechaNac!.day.toString().padLeft(2, '0')}/${_fechaNac!.month.toString().padLeft(2, '0')}/${_fechaNac!.year}';
+    if (_fechaTextCtrl.text == text) return;
+    _updatingFechaText = true;
+    _fechaTextCtrl.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _updatingFechaText = false;
+  }
+
+  void _shiftFecha(int days) {
+    final now = DateTime.now();
+    final fallback = DateTime(now.year - 18, now.month, now.day);
+    final current = _fechaNac ?? fallback;
+    var updated = current.add(Duration(days: days));
+    final minDate = DateTime(now.year - 80, now.month, now.day);
+    final maxDate = DateTime(now.year - 12, now.month, now.day);
+    if (updated.isBefore(minDate)) updated = minDate;
+    if (updated.isAfter(maxDate)) updated = maxDate;
+    setState(() => _fechaNac = updated);
+    _updateFechaTextController();
+    _tryAutoFillCurp();
+  }
+
+  DateTime? _parseFechaFromText(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      if (_fechaNac != null) {
+        setState(() => _fechaNac = null);
+        _tryAutoFillCurp();
+      }
+      return null;
+    }
+
+    DateTime? parsed;
+    final slashMatch = RegExp(r'^(\d{2})[\/](\d{2})[\/](\d{4})$').firstMatch(trimmed);
+    final dashMatch = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(trimmed);
+    try {
+      if (slashMatch != null) {
+        final day = int.parse(slashMatch.group(1)!);
+        final month = int.parse(slashMatch.group(2)!);
+        final year = int.parse(slashMatch.group(3)!);
+        parsed = DateTime(year, month, day);
+      } else if (dashMatch != null) {
+        final year = int.parse(dashMatch.group(1)!);
+        final month = int.parse(dashMatch.group(2)!);
+        final day = int.parse(dashMatch.group(3)!);
+        parsed = DateTime(year, month, day);
+      }
+    } catch (_) {
+      parsed = null;
+    }
+
+    if (parsed == null) return null;
+
+    final now = DateTime.now();
+    final minDate = DateTime(now.year - 80, now.month, now.day);
+    final maxDate = DateTime(now.year - 12, now.month, now.day);
+    if (parsed.isBefore(minDate) || parsed.isAfter(maxDate)) {
+      return null;
+    }
+    return parsed;
   }
 
   Future<void> _pickFechaNac() async {
@@ -140,6 +303,8 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     );
     if (picked != null) {
       setState(() => _fechaNac = picked);
+      _updateFechaTextController();
+      _tryAutoFillCurp();
     }
   }
 
@@ -151,6 +316,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     final apMat = _apMatCtrl.text.trim();
     final curp = _curpCtrl.text.trim().toUpperCase();
     final email = _emailCtrl.text.trim();
+    final telefono = _telefonoCtrl.text.trim();
 
     // Validaciones estrictas
     if (nombre.isEmpty || apPat.isEmpty || apMat.isEmpty) {
@@ -166,24 +332,19 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
       _showError('El correo electrónico es obligatorio y debe ser válido');
       return;
     }
+    if (telefono.isEmpty || telefono.length < 10) {
+      _showError('El teléfono es obligatorio y debe tener al menos 10 dígitos');
+      return;
+    }
 
-    if(curp.isEmpty) {
-      // Generar CURP si no se proporciona
-      final genCurp = generarCurp(
-        nombre: nombre,
-        apPat: apPat,
-        apMat: apMat,
-        sexo: _sexo!,
-        fechaNac: _fechaNac!,
-        estadoNac: _estadoNac!,
-      );
-      _curpCtrl.text = genCurp;
-    } else {
-      // Validar CURP proporcionada
-      if (!RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$').hasMatch(curp)) {
-        _showError('CURP inválida. Debe tener 18 caracteres y formato correcto.');
-        return;
-      }
+    if (curp.isEmpty) {
+      _showError('Completa tu CURP llenando los campos solicitados.');
+      return;
+    }
+
+    if (!RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$').hasMatch(curp)) {
+      _showError('CURP inválida. Debe tener 18 caracteres y formato correcto.');
+      return;
     }
 
 
@@ -201,6 +362,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
             '${_fechaNac!.year}-${_fechaNac!.month.toString().padLeft(2, '0')}-${_fechaNac!.day.toString().padLeft(2, '0')}',
         'estado_nacimiento': _estadoNac,
         'email': email,
+        'telefono': telefono,
         'step': 2,
       };
 
@@ -223,8 +385,8 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
 
       ProgressService.saveStep(2);
 
-      final redirect =
-          user['redirect_to']?.toString() ?? '/admision/pagoexamen';
+        final redirect =
+          user['redirect_to']?.toString() ?? '/admision/bachillerato';
       if (!mounted) return;
       context.push(redirect);
     } catch (e) {
@@ -246,57 +408,56 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colors.surfaceContainerLowest,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final screenWidth = constraints.maxWidth;
-            final margin = screenWidth * 0.05;
-            final contentWidth = screenWidth.clamp(320.0, 1280.0);
-            final isMobile = screenWidth < 640;
+            final tier = screenWidth < 640
+                ? _FormTier.mobile
+                : (screenWidth < 1100 ? _FormTier.compact : _FormTier.wide);
+            final isMobile = tier == _FormTier.mobile;
 
-            return Padding(
-              padding: EdgeInsets.symmetric(horizontal: margin),
-              child: Column(
-                children: [
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: Center(
-                      child: Container(
-                        width: contentWidth,
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: colors.shadow.withOpacity(0.1),
-                              blurRadius: 12,
-                            ),
-                          ],
-                        ),
-                        child: isMobile
-                            ? _buildColumnLayout(context)
-                            : _buildRowLayout(context),
+            return Column(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: Container(
+                      width: constraints.maxWidth,
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                                    BoxShadow(
+                                      color: colors.shadow.withAlpha((0.1 * 255).round()),
+                                      blurRadius: 12,
+                                    ),
+                        ],
                       ),
+                      child: isMobile
+                          ? _buildColumnLayout(context, tier)
+                          : _buildRowLayout(context, tier),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                ],
-              ),
+                ),
+                const SizedBox(height: 24),
+              ],
             );
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showHelpDialog,
-        tooltip: 'Ayuda',
-        child: const Icon(Icons.help_outline),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endTop,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(top: 16, right: 16),
+        child: FloatingActionButton(
+          onPressed: _showHelpDialog,
+          tooltip: 'Ayuda',
+          child: const Icon(Icons.help_outline),
+        ),
       ),
     );
   }
 
-  Widget _buildRowLayout(BuildContext context) {
+  Widget _buildRowLayout(BuildContext context, _FormTier tier) {
     return Row(
       children: [
         Expanded(
@@ -318,7 +479,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: SingleChildScrollView(
-              child: _formContent(context, isMobile: false),
+              child: _formContent(context, tier: tier),
             ),
           ),
         ),
@@ -326,7 +487,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
     );
   }
 
-  Widget _buildColumnLayout(BuildContext context) {
+  Widget _buildColumnLayout(BuildContext context, _FormTier tier) {
     return Column(
       children: [
         ClipRRect(
@@ -344,19 +505,38 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: _formContent(context, isMobile: true),
+            child: _formContent(context, tier: tier),
           ),
         ),
       ],
     );
   }
 
-  Widget _formContent(BuildContext context, {required bool isMobile}) {
-    //final colors = Theme.of(context).colorScheme;
+  Widget _formContent(BuildContext context, {required _FormTier tier}) {
     final textTheme = Theme.of(context).textTheme;
-    //final uri = Uri.parse('https://transparencia.puebla.gob.mx/avisos-de-privacidad-transparencia?catid=196');
+    final colors = Theme.of(context).colorScheme;
+    final stacked = tier != _FormTier.wide;
 
-    Widget nombres = isMobile
+    Widget curpNote() {
+      if (!_autoCurpGenerated) return const SizedBox.shrink();
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: colors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'CURP generado, faltan los últimos caracteres asignados por la RENAPO',
+              style: textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final nombres = stacked
         ? Column(
             children: [
               _inputField(
@@ -395,7 +575,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
                     icon: Icons.person)),
           ]);
 
-    Widget sexoFechaEstado = isMobile
+    final sexoFechaEstado = stacked
         ? Column(
             children: [
               _sexoDropdown(),
@@ -415,8 +595,9 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
             ],
           );
 
-    Widget curpCorreo = isMobile
+    final contacto = stacked
         ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _inputField(
                 controller: _curpCtrl,
@@ -426,6 +607,10 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
                 textCapitalization: TextCapitalization.characters,
                 maxLength: 18,
               ),
+              if (_autoCurpGenerated) ...[
+                const SizedBox(height: 8),
+                curpNote(),
+              ],
               const SizedBox(height: 12),
               _inputField(
                 controller: _emailCtrl,
@@ -433,29 +618,54 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
                 icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
               ),
+              const SizedBox(height: 12),
+              _inputField(
+                controller: _telefonoCtrl,
+                label: 'Teléfono de contacto',
+                icon: Icons.phone_outlined,
+                keyboardType: TextInputType.phone,
+              ),
             ],
           )
-        : Row(children: [
-            Expanded(
-              child: _inputField(
-                controller: _curpCtrl,
-                label: 'CURP de 18 Dígitos',
-                icon: Icons.password,
-                keyboardType: TextInputType.visiblePassword,
-                textCapitalization: TextCapitalization.characters,
-                maxLength: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _inputField(
-                controller: _emailCtrl,
-                label: 'Correo Electrónico',
-                icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
-              ),
-            ),
-          ]);
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: _inputField(
+                    controller: _curpCtrl,
+                    label: 'CURP de 18 Dígitos',
+                    icon: Icons.password,
+                    keyboardType: TextInputType.visiblePassword,
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _inputField(
+                    controller: _emailCtrl,
+                    label: 'Correo Electrónico',
+                    icon: Icons.email_outlined,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _inputField(
+                    controller: _telefonoCtrl,
+                    label: 'Teléfono de contacto',
+                    icon: Icons.phone_outlined,
+                    keyboardType: TextInputType.phone,
+                  ),
+                ),
+              ]),
+              if (_autoCurpGenerated) ...[
+                const SizedBox(height: 8),
+                curpNote(),
+              ],
+            ],
+          );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,7 +678,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
         Text('¿Quieres ser un Guerrero UTH? Estás en el lugar adecuado.',
             style: textTheme.bodyMedium),
         const SizedBox(height: 8),
-        Text('Necesitamos:\n1. Tu Acta de Nacimiento\n2. Datos de tu Bachillerato',
+        Text('Necesitamos:\n1. Tus Datos Personales (CURP)\n2. Medios de Contacto (Correo y Teléfono)',
             style: textTheme.bodySmall),
         const SizedBox(height: 24),
 
@@ -478,11 +688,7 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
         sexoFechaEstado,
         const SizedBox(height: 24),
 
-        Text('Si conoces tu CURP puedes solo llenar el CURP y el Correo',
-            style: textTheme.bodySmall),
-        const SizedBox(height: 12),
-
-        curpCorreo,
+        contacto,
         const SizedBox(height: 24),
 
         Text('NOTA: Se enviará una contraseña temporal al correo proporcionado.',
@@ -605,38 +811,61 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
   }
 
   Widget _sexoDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _sexo,
-      decoration: const InputDecoration(
-        labelText: 'Sexo',
-        prefixIcon: Icon(Icons.wc),
-        border: OutlineInputBorder(),
+    return SizedBox(
+      width: double.infinity,
+      child: DropdownButtonFormField<String>(
+        key: ValueKey(_sexo),
+        initialValue: _sexo,
+        decoration: const InputDecoration(
+          labelText: 'Sexo',
+          prefixIcon: Icon(Icons.wc),
+          border: OutlineInputBorder(),
+        ),
+        isExpanded: true,
+        items: _sexoOptions.entries
+            .map(
+              (entry) => DropdownMenuItem<String>(
+                value: entry.key,
+                child: Text(entry.value),
+              ),
+            )
+            .toList(),
+        onChanged: (value) {
+          setState(() => _sexo = value);
+          _tryAutoFillCurp();
+        },
       ),
-      items: const [
-        DropdownMenuItem(value: 'H', child: Text('Hombre')),
-        DropdownMenuItem(value: 'M', child: Text('Mujer')),
-        DropdownMenuItem(value: 'N', child: Text('No binario')),
-      ],
-      onChanged: (v) => setState(() => _sexo = v),
     );
   }
 
   Widget _fechaNacField() {
-    final text = _fechaNac == null
-        ? ''
-        : '${_fechaNac!.day.toString().padLeft(2, '0')}/${_fechaNac!.month.toString().padLeft(2, '0')}/${_fechaNac!.year}';
-    final controller = TextEditingController(text: text);
-    return InkWell(
-      onTap: _pickFechaNac,
-      child: IgnorePointer(
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.arrowUp): const _AdjustFechaIntent(1),
+        LogicalKeySet(LogicalKeyboardKey.arrowDown): const _AdjustFechaIntent(-1),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _AdjustFechaIntent: CallbackAction<_AdjustFechaIntent>(
+            onInvoke: (_AdjustFechaIntent intent) {
+              _shiftFecha(intent.delta);
+              return null;
+            },
+          ),
+        },
         child: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
+          focusNode: _fechaFocusNode,
+          controller: _fechaTextCtrl,
+          keyboardType: TextInputType.datetime,
+          decoration: InputDecoration(
             labelText: 'Fecha de nacimiento',
-            prefixIcon: Icon(Icons.cake_outlined),
-            border: OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.cake_outlined),
+            border: const OutlineInputBorder(),
             hintText: 'DD/MM/AAAA',
-            suffixIcon: Icon(Icons.calendar_today),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.calendar_today),
+              onPressed: _pickFechaNac,
+            ),
           ),
         ),
       ),
@@ -644,29 +873,30 @@ class _AdmissionScreenState extends State<AdmissionScreen> {
   }
 
 Widget _estadoDropdown() {
-  return DropdownButtonFormField<String>(
-    value: _estadoNac,
-    isExpanded: true, // 👈 evita overflow en desktop/móvil
-    decoration: const InputDecoration(
-      labelText: 'Estado de nacimiento',
-      border: OutlineInputBorder(),
-      prefixIcon: Icon(Icons.location_on_outlined), 
+  return SizedBox(
+    width: double.infinity,
+    child: DropdownButtonFormField<String>(
+      key: ValueKey(_estadoNac),
+      initialValue: _estadoNac,
+      decoration: const InputDecoration(
+        labelText: 'Estado de nacimiento',
+        prefixIcon: Icon(Icons.location_on_outlined),
+        border: OutlineInputBorder(),
+      ),
+      isExpanded: true,
+      items: _estadosMx
+          .map(
+            (estado) => DropdownMenuItem<String>(
+              value: estado['code']!,
+              child: Text(estado['name']!),
+            ),
+          )
+          .toList(),
+      onChanged: (val) {
+        setState(() => _estadoNac = val);
+        _tryAutoFillCurp();
+      },
     ),
-    items: _estadosMx.map((estado) {
-      return DropdownMenuItem<String>(
-        value: estado['code'],
-        child: Text(estado['name']!),
-      );
-    }).toList(),
-    onChanged: (val) {
-      setState(() => _estadoNac = val);
-    },
-    validator: (val) {
-      if (val == null || val.isEmpty) {
-        return 'Selecciona tu estado de nacimiento';
-      }
-      return null;
-    },
   );
 }
 
@@ -762,7 +992,7 @@ String generarCurp({
           '${consNom.isNotEmpty ? consNom[0] : 'X'}';
 
   // 🔹 Homoclave y dígito verificador (simulados)
-  curp += '00';
+  curp;
 
   return curp;
 }

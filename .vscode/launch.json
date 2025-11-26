@@ -10,8 +10,11 @@
             "request": "launch",
             "type": "dart",
             "deviceId": "edge",
-            "program": "lib/main.dart",
-            "args": []
+                  "args": [
+                        "-d",
+                        "edge",
+                        "--web-port=9001"
+            ]
         },
         {
             "name": "siiadmision (profile mode)",

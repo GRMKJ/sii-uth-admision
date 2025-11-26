@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:siiadmision/layout/header.dart';
-import 'package:siiadmision/layout/side_navigation.dart';
+import 'package:siiadmision/widgets/sidebar.dart';
 import 'package:go_router/go_router.dart';
 
 class DashboardAlumnoScreen extends StatefulWidget {
@@ -11,102 +11,120 @@ class DashboardAlumnoScreen extends StatefulWidget {
 }
 
 class _DashboardAlumnoScreenState extends State<DashboardAlumnoScreen> {
-  int _selectedIndex = 0;
+  final int _selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final useRail = useNavigationRailLayout(context);
+
+    void handleNavigation(int index) {
+      switch (index) {
+        case 0:
+          context.go('/alumno/inicio');
+          break;
+        case 6:
+          context.go('/alumno/ajustes');
+          break;
+        case 7:
+          context.go('/');
+          break;
+        default:
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Módulo no implementado')), 
+          );
+      }
+    }
+
+    final content = SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final screenWidth = constraints.maxWidth;
+          final contentWidth = screenWidth.clamp(320.0, 1000.0);
+
+          return Column(
+            children: [
+              UthHeader(maxWidth: contentWidth),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Center(
+                  child: Container(
+                    width: contentWidth,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.shadow.withAlpha((0.1 * 255).round()),
+                          blurRadius: 12,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Panel de Alumno',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 24),
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _HorarioWidget()),
+                              const SizedBox(width: 16),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _EstadoInscripcionWidget(),
+                                    SizedBox(height: 16),
+                                    _ProximosFestivosWidget(),
+                                  ],
+                                ),
+                              )
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
 
     return Scaffold(
       backgroundColor: colors.surfaceContainerLowest,
-      body: Row(
-        children: [
-          SideNavigationAlumno(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) {
-              switch (index) {
-                case 0:
-                  context.go('/alumno/inicio');
-                  break;
-                case 7:
-                  context.go('/');
-                  break;
-              }
-            },
-          ),
-          Expanded(
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final screenWidth = constraints.maxWidth;
-                  final contentWidth = screenWidth.clamp(320.0, 1000.0);
-
-                  return Column(
-                    children: [
-                      UthHeader(maxWidth: contentWidth),
-                      const SizedBox(height: 24),
-                      Expanded(
-                        child: Center(
-                          child: Container(
-                            width: contentWidth,
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: colors.surface,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: colors.shadow.withOpacity(0.1),
-                                  blurRadius: 12,
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Panel de Alumno',
-                                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                                const SizedBox(height: 24),
-                                Expanded(
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Horario Semanal
-                                      Expanded(
-                                        child: _HorarioWidget(),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      // Estado de inscripción y festivos
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: const [
-                                            _EstadoInscripcionWidget(),
-                                            SizedBox(height: 16),
-                                            _ProximosFestivosWidget(),
-                                          ],
-                                        ),
-                                      )
-                                    ],
-                                  ),
-                                )
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: _selectedIndex,
+              destinations: alumnoNavigationDestinations,
+              onDestinationSelected: handleNavigation,
             ),
-          ),
-        ],
-      ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigationAlumno(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: handleNavigation,
+                  ),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
     );
   }
 }
