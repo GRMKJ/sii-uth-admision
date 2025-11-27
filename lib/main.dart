@@ -55,9 +55,6 @@ void main() async {
   final initialLocation = await _resolveInitialLocation();
   _router = _buildRouter(initialLocation);
 
-  // Only run jailbreak detection on real mobile platforms (Android/iOS).
-  // The plugin is not implemented on web/desktop and will throw
-  // MissingPluginException if invoked there.
   final bool isMobile = !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
@@ -106,20 +103,44 @@ Future<void> _configureFirebaseMessaging() async {
     );
   }
 
+  String? fcmToken;
   if (kIsWeb) {
     if (_webPushKey.isNotEmpty) {
-      await messaging.getToken(vapidKey: _webPushKey);
+      fcmToken = await messaging.getToken(vapidKey: _webPushKey);
     } else {
       debugPrint('Set FIREBASE_WEB_PUSH_KEY to receive web push tokens.');
     }
   } else {
-    await messaging.getToken();
+    fcmToken = await messaging.getToken();
+  }
+
+  if (fcmToken != null && fcmToken.isNotEmpty) {
+    await _sendStartupTestNotification(fcmToken);
   }
 
   FirebaseMessaging.onMessage.listen((message) {
     final notification = message.notification;
     debugPrint('Push received: ${notification?.title ?? message.messageId}');
   });
+}
+
+Future<void> _sendStartupTestNotification(String fcmToken) async {
+  const storage = FlutterSecureStorage();
+  final authToken = await storage.read(key: 'auth_token');
+  if (authToken == null || authToken.isEmpty) {
+    return;
+  }
+
+  try {
+    await ApiClient.postJson(
+      '/notifications/test',
+      token: authToken,
+      body: {'token': fcmToken},
+    );
+  } catch (e, st) {
+    debugPrint('No se pudo solicitar la notificación de prueba: $e');
+    debugPrint('$st');
+  }
 }
 
 GoRouter _buildRouter(String initialLocation) {
