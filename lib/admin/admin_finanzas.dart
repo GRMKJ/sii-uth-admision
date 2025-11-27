@@ -65,22 +65,25 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
       final payload = response['data'] as Map<String, dynamic>?;
       final rows = payload?['data'] as List<dynamic>? ?? [];
       final conceptos = rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      final lockedConcept = conceptos.where((element) => element['id'] == _diagnosticConfigId).toList();
-      final effectiveConceptos = lockedConcept.isNotEmpty ? lockedConcept : conceptos;
       Map<String, dynamic>? nextSelected;
-      if (effectiveConceptos.isNotEmpty) {
-        final currentId = _selectedConcepto?['id'];
-        if (currentId != null) {
-          nextSelected = effectiveConceptos.firstWhere(
-            (element) => element['id'] == currentId,
-            orElse: () => effectiveConceptos.first,
-          );
-        } else {
-          nextSelected = effectiveConceptos.first;
+      if (conceptos.isNotEmpty) {
+        Map<String, dynamic>? findById(int? id) {
+          if (id == null) return null;
+          for (final concepto in conceptos) {
+            final value = concepto['id'];
+            if (value is int && value == id) {
+              return concepto;
+            }
+          }
+          return null;
         }
+
+        nextSelected = findById(_selectedConcepto?['id'] as int?);
+        nextSelected ??= findById(_diagnosticConfigId);
+        nextSelected ??= conceptos.first;
       }
       setState(() {
-        _conceptos = effectiveConceptos;
+        _conceptos = conceptos;
         _selectedConcepto = nextSelected;
         _loadingConceptos = false;
         _syncMontoController(nextSelected);
@@ -263,7 +266,7 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
                             ),
                           )
                           .toList(),
-                      enabled: _conceptos.length > 1,
+                      enabled: _conceptos.isNotEmpty,
                       onSelected: (value) {
                         if (value == null) return;
                         final concept = _conceptos.firstWhere((element) => element['id'] == value);
@@ -458,12 +461,13 @@ class _AdminFinanzasScreenState extends State<AdminFinanzasScreen> {
                     initialSelection: _stepFilter,
                     dropdownMenuEntries: const [
                       DropdownMenuEntry(value: 'todos', label: 'Todos'),
-                      DropdownMenuEntry(value: '1', label: 'Paso 1'),
-                      DropdownMenuEntry(value: '2', label: 'Paso 2'),
-                      DropdownMenuEntry(value: '3', label: 'Paso 3'),
-                      DropdownMenuEntry(value: '4', label: 'Paso 4'),
-                      DropdownMenuEntry(value: '5', label: 'Paso 5'),
-                      DropdownMenuEntry(value: '6', label: 'Paso 6'),
+                      DropdownMenuEntry(value: '1', label: '1 - Registro'),
+                      DropdownMenuEntry(value: '2', label: '2 - Datos personales'),
+                      DropdownMenuEntry(value: '3', label: '3 - Pago examen'),
+                      DropdownMenuEntry(value: '4', label: '4 - Esperando folio'),
+                      DropdownMenuEntry(value: '5', label: '5 - Subida de documentos'),
+                      DropdownMenuEntry(value: '6', label: '6 - Revisión de documentos'),
+                      DropdownMenuEntry(value: '7', label: '7 - Alumno activo'),
                     ],
                     onSelected: (value) {
                       setState(() => _stepFilter = value ?? 'todos');

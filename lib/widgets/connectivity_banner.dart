@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 /// Displays a persistent warning banner whenever the device loses connectivity.
 class ConnectivityBanner extends StatefulWidget {
@@ -15,7 +16,11 @@ class ConnectivityBanner extends StatefulWidget {
 
 class _ConnectivityBannerState extends State<ConnectivityBanner> {
   StreamSubscription<List<ConnectivityResult>>? _subscription;
+  StreamSubscription<InternetStatus>? _internetSubscription;
+  final InternetConnection _connectionChecker = InternetConnection();
   bool _isOffline = false;
+  bool _transportOffline = false;
+  bool _internetOffline = false;
 
   @override
   void initState() {
@@ -27,17 +32,54 @@ class _ConnectivityBannerState extends State<ConnectivityBanner> {
     final connectivity = Connectivity();
     connectivity.checkConnectivity().then(_handleConnectivity).catchError((_) {});
     _subscription = connectivity.onConnectivityChanged.listen(_handleConnectivity);
+
+    _connectionChecker.hasInternetAccess.then(
+      (hasInternet) => _handleInternetStatus(
+        hasInternet ? InternetStatus.connected : InternetStatus.disconnected,
+      ),
+    );
+    _internetSubscription = _connectionChecker.onStatusChange.listen(_handleInternetStatus);
   }
 
   void _handleConnectivity(List<ConnectivityResult> results) {
-    final offline = results.isEmpty || results.every((result) => result == ConnectivityResult.none);
-    if (!mounted || offline == _isOffline) return;
-    setState(() => _isOffline = offline);
+    _transportOffline = !_hasUsableInterface(results);
+    _refreshOfflineState();
+  }
+
+  void _handleInternetStatus(InternetStatus status) {
+    _internetOffline = status == InternetStatus.disconnected;
+    _refreshOfflineState();
+  }
+
+  bool _hasUsableInterface(List<ConnectivityResult> results) {
+    if (results.isEmpty) return false;
+    if (results.any((result) => result == ConnectivityResult.none)) {
+      return false;
+    }
+
+    for (final result in results) {
+      switch (result) {
+        case ConnectivityResult.wifi:
+        case ConnectivityResult.mobile:
+        case ConnectivityResult.ethernet:
+          return true;
+        default:
+          break;
+      }
+    }
+    return false;
+  }
+
+  void _refreshOfflineState() {
+    final newValue = _transportOffline || _internetOffline;
+    if (!mounted || newValue == _isOffline) return;
+    setState(() => _isOffline = newValue);
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
+    _internetSubscription?.cancel();
     super.dispose();
   }
 

@@ -29,14 +29,26 @@ import 'package:siiadmision/config/theme_controller.dart';
 import 'package:siiadmision/settings/settings_screen.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config/platform_info.dart';
 import 'admision/models/bachillerato_form_data.dart';
+import 'firebase_options.dart';
 
 late GoRouter _router;
+const String _webPushKey = String.fromEnvironment('FIREBASE_WEB_PUSH_KEY', defaultValue: '');
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint('FCM background message: ${message.messageId}');
+}
 
 void main() async {
   setUrlStrategy(PathUrlStrategy());
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await _configureFirebaseMessaging();
   await Session().load(); 
   await themeController.loadThemeMode();
 
@@ -66,6 +78,48 @@ void main() async {
   }
 
   runApp(MyApp(themeController: themeController));
+}
+
+Future<void> _configureFirebaseMessaging() async {
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
+
+  final messaging = FirebaseMessaging.instance;
+  final settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+    announcement: false,
+    carPlay: false,
+    criticalAlert: false,
+    provisional: false,
+  );
+
+  if (settings.authorizationStatus == AuthorizationStatus.denied) {
+    debugPrint('Push notifications permission denied.');
+  } else {
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+  }
+
+  if (kIsWeb) {
+    if (_webPushKey.isNotEmpty) {
+      await messaging.getToken(vapidKey: _webPushKey);
+    } else {
+      debugPrint('Set FIREBASE_WEB_PUSH_KEY to receive web push tokens.');
+    }
+  } else {
+    await messaging.getToken();
+  }
+
+  FirebaseMessaging.onMessage.listen((message) {
+    final notification = message.notification;
+    debugPrint('Push received: ${notification?.title ?? message.messageId}');
+  });
 }
 
 GoRouter _buildRouter(String initialLocation) {

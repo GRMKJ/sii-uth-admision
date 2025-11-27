@@ -14,12 +14,6 @@ class AspirantesAdminScreen extends StatefulWidget {
 }
 
 class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
-  static const List<String> _tabs = [
-    'Todos',
-    'Con Pago',
-    'Con Documentos',
-    'Listos para Inscripcion',
-  ];
 
   final storage = const FlutterSecureStorage();
   Map<String, dynamic>? data;
@@ -50,23 +44,11 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
     setState(() => data = response['data']);
   }
 
-  List<dynamic> _listForTab(int index) {
-    if (data == null) return const [];
-    switch (index) {
-      case 1:
-        return data!['con_pago'] as List<dynamic>? ?? const [];
-      case 2:
-        return data!['con_documentos'] as List<dynamic>? ?? const [];
-      case 3:
-        return data!['listos_inscripcion'] as List<dynamic>? ?? const [];
-      default:
-        return data!['todos'] as List<dynamic>? ?? const [];
-    }
-  }
-
-  List<dynamic> _filteredAspirantes(int tabIndex) {
+  List<dynamic> _filteredAspirantes() {
     final query = _searchController.text.trim().toLowerCase();
-    final base = List<dynamic>.from(_listForTab(tabIndex));
+    final base = List<dynamic>.from(
+      data?['todos'] as List<dynamic>? ?? const [],
+    );
 
     return base.where((raw) {
       final aspirante = raw as Map<String, dynamic>;
@@ -85,61 +67,6 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
 
       return matchesQuery && folioOk && stepOk;
     }).toList();
-  }
-
-  String? _buttonLabelForTab(int index) {
-    switch (index) {
-      case 1:
-        return 'Validar Pago';
-      case 2:
-        return 'Ver Documentos';
-      case 3:
-        return 'Autorizar e Inscribir';
-      default:
-        return null;
-    }
-  }
-
-  void Function(BuildContext, Map<String, dynamic>)? _actionForTab(int index) {
-    switch (index) {
-      case 1:
-        return (context, aspirante) {
-          final pagos = aspirante['pagos'] as List<dynamic>? ?? [];
-          final ref =
-              pagos.isNotEmpty ? pagos.first['referencia']?.toString() : null;
-          if (ref == null || ref.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Este aspirante no tiene pago registrado.')),
-            );
-            return;
-          }
-          context.push('/admin/$ref/pago/');
-        };
-      case 2:
-        return (context, aspirante) {
-          final folio = (aspirante['folio_examen'] ?? '').toString();
-          if (folio.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('El aspirante no cuenta con folio.')),
-            );
-            return;
-          }
-          context.push('/admin/aspirante/$folio/documentos');
-        };
-      case 3:
-        return (context, aspirante) {
-          final folio = (aspirante['folio_examen'] ?? '').toString();
-          if (folio.isEmpty) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('El aspirante no cuenta con folio.')),
-            );
-            return;
-          }
-          context.push('/admin/aspirante/$folio/inscripcion');
-        };
-      default:
-        return null;
-    }
   }
 
   @override
@@ -170,28 +97,36 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
           final screenWidth = constraints.maxWidth;
           final contentWidth = screenWidth.clamp(320.0, 1280.0);
 
+          final filtered = _filteredAspirantes();
           return Column(
             children: [
               UthHeader(maxWidth: contentWidth),
               const SizedBox(height: 16),
-              TabBar(
-                isScrollable: true,
-                indicatorColor: colors.primary,
-                labelColor: colors.primary,
-                unselectedLabelColor: colors.onSurfaceVariant,
-                tabs: _tabs.map((t) => Tab(text: t)).toList(),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _FiltersBar(
-                  searchController: _searchController,
-                  stepFilter: _stepFilter,
-                  soloConFolio: _soloConFolio,
-                  onStepChanged: (value) =>
-                      setState(() => _stepFilter = value ?? 'todos'),
-                  onToggleFolio: (value) =>
-                      setState(() => _soloConFolio = value),
+              Align(
+                alignment: Alignment.center,
+                child: Container(
+                  width: contentWidth,
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.shadow.withAlpha((0.05 * 255).round()),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: _FiltersBar(
+                    searchController: _searchController,
+                    stepFilter: _stepFilter,
+                    soloConFolio: _soloConFolio,
+                    onStepChanged: (value) =>
+                        setState(() => _stepFilter = value ?? 'todos'),
+                    onToggleFolio: (value) =>
+                        setState(() => _soloConFolio = value),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -212,16 +147,7 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
                   ),
                   child: data == null
                       ? const Center(child: CircularProgressIndicator())
-                      : TabBarView(
-                          children: List.generate(_tabs.length, (index) {
-                            final filtered = _filteredAspirantes(index);
-                            return _buildList(
-                              filtered,
-                              buttonLabel: _buttonLabelForTab(index),
-                              onPressed: _actionForTab(index),
-                            );
-                          }),
-                        ),
+                      : _buildList(filtered),
                 ),
               ),
             ],
@@ -230,32 +156,29 @@ class _AspirantesAdminScreenState extends State<AspirantesAdminScreen> {
       ),
     );
 
-    return DefaultTabController(
-      length: _tabs.length,
-      child: Scaffold(
-        backgroundColor: colors.surfaceContainerLowest,
-        bottomNavigationBar: useRail
-            ? null
-            : NavigationBar(
-                selectedIndex: 1,
-                destinations: adminNavigationDestinations,
-                onDestinationSelected: handleNavigation,
-              ),
-        body: useRail
-            ? Row(
-                children: [
-                  SizedBox(
-                    width: 96,
-                    child: SideNavigationAdmin(
-                      selectedIndex: 1,
-                      onDestinationSelected: handleNavigation,
-                    ),
+    return Scaffold(
+      backgroundColor: colors.surfaceContainerLowest,
+      bottomNavigationBar: useRail
+          ? null
+          : NavigationBar(
+              selectedIndex: 1,
+              destinations: adminNavigationDestinations,
+              onDestinationSelected: handleNavigation,
+            ),
+      body: useRail
+          ? Row(
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: SideNavigationAdmin(
+                    selectedIndex: 1,
+                    onDestinationSelected: handleNavigation,
                   ),
-                  Expanded(child: content),
-                ],
-              )
-            : content,
-      ),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
     );
   }
 }
@@ -358,12 +281,13 @@ class _FiltersBar extends StatelessWidget {
                 initialSelection: stepFilter,
                 dropdownMenuEntries: const [
                   DropdownMenuEntry(value: 'todos', label: 'Todos'),
-                  DropdownMenuEntry(value: '1', label: 'Paso 1'),
-                  DropdownMenuEntry(value: '2', label: 'Paso 2'),
-                  DropdownMenuEntry(value: '3', label: 'Paso 3'),
-                  DropdownMenuEntry(value: '4', label: 'Paso 4'),
-                  DropdownMenuEntry(value: '5', label: 'Paso 5'),
-                  DropdownMenuEntry(value: '6', label: 'Paso 6'),
+                  DropdownMenuEntry(value: '1', label: '1 - Registro'),
+                  DropdownMenuEntry(value: '2', label: '2 - Datos personales'),
+                  DropdownMenuEntry(value: '3', label: '3 - Pago examen'),
+                  DropdownMenuEntry(value: '4', label: '4 - Esperando folio'),
+                  DropdownMenuEntry(value: '5', label: '5 - Subida de documentos'),
+                  DropdownMenuEntry(value: '6', label: '6 - Revisión de documentos'),
+                  DropdownMenuEntry(value: '7', label: '7 - Alumno activo'),
                 ],
                 onSelected: onStepChanged,
               ),

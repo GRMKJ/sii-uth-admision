@@ -1,0 +1,5 @@
+<resources>
+    <string name="default_notification_channel_id">sii_uth_alerts</string>
+    <string name="default_notification_channel_name">Alertas generales</string>
+    <string name="default_notification_channel_desc">Notificaciones del módulo de Admisión de la UTH</string>
+</resources>

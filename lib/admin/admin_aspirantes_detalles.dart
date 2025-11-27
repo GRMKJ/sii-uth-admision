@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
@@ -169,7 +170,7 @@ class _PagoDetalleScreenState extends State<PagoDetalleScreen> {
             Text("Teléfono: ${aspirante['telefono']}"),
             const Divider(),
             Text("Referencia: ${pago['referencia']}"),
-            Text("Estado: ${pago['estado_validacion']}"),
+              Text("Estado: ${_paymentStatusLabel(pago['estado_validacion'])}"),
             const Spacer(),
             Row(
               children: [
@@ -510,28 +511,42 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
       ]);
     }
 
-    final pagoList = pagos.map((pago) => Map<String, dynamic>.from(pago as Map)).toList();
-    final rows = pagoList.map((pagoMap) {
-      return DataRow(cells: [
-        DataCell(Text(pagoMap['referencia']?.toString() ?? 'N/D')),
-        DataCell(Text(pagoMap['tipo_pago']?.toString() ?? 'N/D')),
-        DataCell(Text(pagoMap['estado_validacion_texto']?.toString() ?? 'N/D')),
-        DataCell(Text(pagoMap['fecha_pago']?.toString() ?? 'N/D')),
-        DataCell(
-          TextButton.icon(
-            onPressed: () => _showPagoDetails(context, pagoMap),
-            icon: const Icon(Icons.visibility_outlined, size: 18),
-            label: const Text('Detalles'),
+      final pagoList = pagos.map((pago) => Map<String, dynamic>.from(pago as Map)).toList();
+      final validatedPagos = pagoList.where((pago) {
+        final estado = (pago['estado_validacion'] as num?)?.toInt() ?? 0;
+        return estado == 1;
+      }).toList();
+
+      if (validatedPagos.isEmpty) {
+        return _buildSection(context, 'Pagos realizados', [
+          _infoLine(context, 'Estado', 'Sin pagos validados'),
+        ]);
+      }
+
+      final rows = validatedPagos.map((pagoMap) {
+        final concepto = _paymentConceptLabel(pagoMap);
+        return DataRow(cells: [
+          DataCell(Text(concepto)),
+          DataCell(Text(pagoMap['referencia']?.toString() ?? 'N/D')),
+          DataCell(Text(pagoMap['tipo_pago']?.toString() ?? 'N/D')),
+          DataCell(Text(_paymentStatusLabel(pagoMap['estado_validacion']))),
+          DataCell(Text(pagoMap['fecha_pago']?.toString() ?? 'N/D')),
+          DataCell(
+            TextButton.icon(
+              onPressed: () => _showPagoDetails(context, pagoMap),
+              icon: const Icon(Icons.visibility_outlined, size: 18),
+              label: const Text('Detalles'),
+            ),
           ),
-        ),
-      ]);
-    }).toList();
+        ]);
+      }).toList();
 
     return _buildSection(context, 'Pagos realizados', [
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
           columns: const [
+            DataColumn(label: Text('Concepto')),
             DataColumn(label: Text('Referencia')),
             DataColumn(label: Text('Tipo')),
             DataColumn(label: Text('Estado')),
@@ -1273,6 +1288,7 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
           'comentario': comentario,
         },
       );
+      await _sendDocumentRequestNotification(docId, doc['nombre']?.toString());
       messenger.showSnackBar(
         const SnackBar(content: Text('Solicitud enviada al aspirante.')),
       );
@@ -1280,6 +1296,37 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
       messenger.showSnackBar(
         SnackBar(content: Text('Error al solicitar nuevo documento: $e')),
       );
+    }
+  }
+
+  Future<void> _sendDocumentRequestNotification(String docId, String? docName) async {
+    final aspiranteId = widget.aspiranteId.trim();
+    if (aspiranteId.isEmpty || docId.isEmpty) return;
+
+    final readableName = (docName?.trim().isNotEmpty ?? false)
+        ? docName!.trim()
+        : 'Documento';
+
+    try {
+      final token = await const FlutterSecureStorage().read(key: 'auth_token');
+      if (token == null) return;
+
+      await ApiClient.postJson(
+        '/admin/notificaciones/aspirantes/$aspiranteId',
+        token: token,
+        body: {
+          'title': 'Tu documento no pudo ser validado',
+          'body': 'Por favor vuelve a subir uno que se adecue a las especificaciones.',
+          'data': {
+            'tipo': 'documento_rechazado',
+            'documento': readableName,
+            'documento_id': docId,
+          },
+        },
+      );
+    } catch (e, stackTrace) {
+      debugPrint('No se pudo enviar la notificación del documento: $e');
+      debugPrint('$stackTrace');
     }
   }
 
@@ -1300,4 +1347,26 @@ class _AspiranteDetalleScreenState extends State<AspiranteDetalleScreen> {
     }
     return null;
   }
+}
+
+String _paymentStatusLabel(dynamic estado) {
+  final code = estado is num ? estado.toInt() : int.tryParse('$estado') ?? 0;
+  return code == 1 ? 'Pago validado' : 'Pago no validado';
+}
+
+String _paymentConceptLabel(Map<String, dynamic> pago) {
+  final config = pago['configuracion'];
+  if (config is Map<String, dynamic>) {
+    final concept = config['concepto']?.toString().trim();
+    if (concept != null && concept.isNotEmpty) {
+      return concept;
+    }
+  }
+
+  final idConfig = pago['id_configuracion']?.toString().trim();
+  if (idConfig != null && idConfig.isNotEmpty) {
+    return 'Config $idConfig';
+  }
+
+  return 'N/D';
 }
