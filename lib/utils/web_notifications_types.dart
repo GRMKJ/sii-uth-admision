@@ -1,0 +1,1 @@
+typedef NotificationTapCallback = void Function();

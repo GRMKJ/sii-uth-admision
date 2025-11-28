@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
@@ -29,9 +31,11 @@ import 'package:siiadmision/config/theme_controller.dart';
 import 'package:siiadmision/config/startup_notification_dispatcher.dart';
 import 'package:siiadmision/settings/settings_screen.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:siiadmision/utils/web_notifications.dart';
 import 'config/platform_info.dart';
 import 'admision/models/bachillerato_form_data.dart';
 import 'firebase_options.dart';
@@ -39,6 +43,15 @@ import 'firebase_options.dart';
 late GoRouter _router;
 const String _webPushKey = String.fromEnvironment('FIREBASE_WEB_PUSH_KEY', defaultValue: '');
 final GlobalKey<ScaffoldMessengerState> _rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+bool _localNotificationsReady = false;
+
+const AndroidNotificationChannel _androidNotificationChannel = AndroidNotificationChannel(
+  'siiadmision_high_importance',
+  'Notificaciones importantes',
+  description: 'Alertas y recordatorios del módulo de admisión',
+  importance: Importance.high,
+);
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -50,7 +63,8 @@ void main() async {
   setUrlStrategy(PathUrlStrategy());
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await _configureFirebaseMessaging();
+  await _initializeLocalNotifications();
+  unawaited(_configureFirebaseMessagingSafe());
   await Session().load(); 
   await themeController.loadThemeMode();
 
@@ -95,25 +109,33 @@ Future<void> _configureFirebaseMessaging() async {
     provisional: false,
   );
 
-  if (settings.authorizationStatus == AuthorizationStatus.denied) {
-    debugPrint('Push notifications permission denied.');
-  } else {
-    await messaging.setForegroundNotificationPresentationOptions(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+  final isAuthorized = settings.authorizationStatus == AuthorizationStatus.authorized ||
+      settings.authorizationStatus == AuthorizationStatus.provisional;
+
+  if (!isAuthorized) {
+    debugPrint('Push notifications permission denied or not granted by the user.');
+    return;
   }
 
+  await messaging.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+
   String? fcmToken;
-  if (kIsWeb) {
-    if (_webPushKey.isNotEmpty) {
-      fcmToken = await messaging.getToken(vapidKey: _webPushKey);
+  try {
+    if (kIsWeb) {
+      if (_webPushKey.isNotEmpty) {
+        fcmToken = await messaging.getToken(vapidKey: _webPushKey);
+      } else {
+        debugPrint('Set FIREBASE_WEB_PUSH_KEY to receive web push tokens.');
+      }
     } else {
-      debugPrint('Set FIREBASE_WEB_PUSH_KEY to receive web push tokens.');
+      fcmToken = await messaging.getToken();
     }
-  } else {
-    fcmToken = await messaging.getToken();
+  } catch (e, st) {
+    debugPrint('Failed to acquire FCM token: $e\n$st');
   }
 
   if (fcmToken != null && fcmToken.isNotEmpty) {
@@ -123,14 +145,94 @@ Future<void> _configureFirebaseMessaging() async {
   FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 }
 
-void _handleForegroundMessage(RemoteMessage message) {
-  final notification = message.notification;
-  final title = notification?.title ?? message.data['title'] ?? 'Nueva notificación';
-  final body = notification?.body ?? message.data['body'] ?? '';
-  final deeplink = message.data['deeplink'] as String?;
+Future<void> _configureFirebaseMessagingSafe() async {
+  try {
+    await _configureFirebaseMessaging();
+  } catch (e, st) {
+    debugPrint('Unable to configure Firebase Messaging: $e\n$st');
+  }
+}
 
-  debugPrint('Push received: ${notification?.title ?? message.messageId}');
+Future<void> _initializeLocalNotifications() async {
+  if (kIsWeb) {
+    return;
+  }
 
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  final iosSettings = DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestBadgePermission: false,
+    requestSoundPermission: false,
+  );
+
+  final initSettings = InitializationSettings(android: androidSettings, iOS: iosSettings);
+
+  await _localNotifications.initialize(
+    initSettings,
+    onDidReceiveNotificationResponse: (response) {
+      _handleNotificationPayload(response.payload);
+    },
+  );
+
+  await _localNotifications
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_androidNotificationChannel);
+
+  _localNotificationsReady = true;
+}
+
+Future<bool> _showSystemNotification({
+  required String title,
+  required String body,
+  String? payload,
+}) async {
+  if (kIsWeb) {
+    return showBrowserNotification(
+      title: title,
+      body: body,
+      payload: payload,
+      onTap: payload != null && payload.isNotEmpty
+          ? () => _navigateFromNotification(payload)
+          : null,
+    );
+  }
+
+  if (!_localNotificationsReady) {
+    return false;
+  }
+
+  final notificationDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _androidNotificationChannel.id,
+      _androidNotificationChannel.name,
+      channelDescription: _androidNotificationChannel.description,
+      importance: Importance.high,
+      priority: Priority.high,
+      ticker: 'SII Admisión',
+    ),
+    iOS: const DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    ),
+  );
+
+  try {
+    await _localNotifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      title,
+      body.isEmpty ? null : body,
+      notificationDetails,
+      payload: payload,
+    );
+    return true;
+  } catch (e, st) {
+    debugPrint('Unable to show local notification: $e\n$st');
+    return false;
+  }
+}
+
+void _showInAppFallback(String title, String body, String? deeplink) {
   final messenger = _rootScaffoldMessengerKey.currentState;
   if (messenger == null) {
     return;
@@ -145,8 +247,7 @@ void _handleForegroundMessage(RemoteMessage message) {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-          if (body.isNotEmpty)
-            Text(body),
+          if (body.isNotEmpty) Text(body),
         ],
       ),
       action: deeplink != null && deeplink.isNotEmpty
@@ -157,6 +258,25 @@ void _handleForegroundMessage(RemoteMessage message) {
           : null,
     ),
   );
+}
+
+Future<void> _handleForegroundMessage(RemoteMessage message) async {
+  final notification = message.notification;
+  final title = notification?.title ?? message.data['title'] ?? 'Nueva notificación';
+  final body = notification?.body ?? message.data['body'] ?? '';
+  final deeplink = message.data['deeplink'] as String?;
+
+  debugPrint('Push received: ${notification?.title ?? message.messageId}');
+
+  final displayed = await _showSystemNotification(
+    title: title,
+    body: body,
+    payload: deeplink,
+  );
+
+  if (!displayed) {
+    _showInAppFallback(title, body, deeplink);
+  }
 }
 
 void _navigateFromNotification(String deeplink) {
@@ -182,6 +302,13 @@ void _navigateFromNotification(String deeplink) {
   if (uri.hasAuthority || deeplink.startsWith('/')) {
     _router.go(uri.path.isEmpty ? '/' : uri.toString());
   }
+}
+
+void _handleNotificationPayload(String? payload) {
+  if (payload == null || payload.isEmpty) {
+    return;
+  }
+  _navigateFromNotification(payload);
 }
 
 GoRouter _buildRouter(String initialLocation) {
