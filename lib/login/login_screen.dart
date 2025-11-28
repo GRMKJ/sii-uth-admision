@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/local_user_store.dart';
 import 'package:siiadmision/config/session.dart';
+import 'package:siiadmision/config/startup_notification_dispatcher.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -239,6 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await session.saveIdentity(_buildLocalIdentityPayload(user));
 
       await session.load();
+      await StartupNotificationDispatcher.notifyAfterAuthentication();
 
       switch (role) {
         case "aspirante":

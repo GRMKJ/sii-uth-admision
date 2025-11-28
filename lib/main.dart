@@ -26,6 +26,7 @@ import 'package:siiadmision/admin/admin_finanzas.dart';
 import 'package:siiadmision/config/api_client.dart';
 import 'package:siiadmision/config/session.dart';
 import 'package:siiadmision/config/theme_controller.dart';
+import 'package:siiadmision/config/startup_notification_dispatcher.dart';
 import 'package:siiadmision/settings/settings_screen.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -37,6 +38,7 @@ import 'firebase_options.dart';
 
 late GoRouter _router;
 const String _webPushKey = String.fromEnvironment('FIREBASE_WEB_PUSH_KEY', defaultValue: '');
+final GlobalKey<ScaffoldMessengerState> _rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -115,31 +117,70 @@ Future<void> _configureFirebaseMessaging() async {
   }
 
   if (fcmToken != null && fcmToken.isNotEmpty) {
-    await _sendStartupTestNotification(fcmToken);
+    await StartupNotificationDispatcher.registerFcmToken(fcmToken);
   }
 
-  FirebaseMessaging.onMessage.listen((message) {
-    final notification = message.notification;
-    debugPrint('Push received: ${notification?.title ?? message.messageId}');
-  });
+  FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 }
 
-Future<void> _sendStartupTestNotification(String fcmToken) async {
-  const storage = FlutterSecureStorage();
-  final authToken = await storage.read(key: 'auth_token');
-  if (authToken == null || authToken.isEmpty) {
+void _handleForegroundMessage(RemoteMessage message) {
+  final notification = message.notification;
+  final title = notification?.title ?? message.data['title'] ?? 'Nueva notificación';
+  final body = notification?.body ?? message.data['body'] ?? '';
+  final deeplink = message.data['deeplink'] as String?;
+
+  debugPrint('Push received: ${notification?.title ?? message.messageId}');
+
+  final messenger = _rootScaffoldMessengerKey.currentState;
+  if (messenger == null) {
     return;
   }
 
-  try {
-    await ApiClient.postJson(
-      '/notifications/test',
-      token: authToken,
-      body: {'token': fcmToken},
-    );
-  } catch (e, st) {
-    debugPrint('No se pudo solicitar la notificación de prueba: $e');
-    debugPrint('$st');
+  messenger.clearSnackBars();
+  messenger.showSnackBar(
+    SnackBar(
+      duration: const Duration(seconds: 6),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          if (body.isNotEmpty)
+            Text(body),
+        ],
+      ),
+      action: deeplink != null && deeplink.isNotEmpty
+          ? SnackBarAction(
+              label: 'Ver',
+              onPressed: () => _navigateFromNotification(deeplink),
+            )
+          : null,
+    ),
+  );
+}
+
+void _navigateFromNotification(String deeplink) {
+  final messenger = _rootScaffoldMessengerKey.currentState;
+  messenger?.clearSnackBars();
+
+  final uri = Uri.tryParse(deeplink);
+  if (uri == null) {
+    return;
+  }
+
+  if (uri.scheme == 'siiadmision') {
+    final host = uri.host.isNotEmpty ? '/${uri.host}' : '';
+    final path = uri.path.isNotEmpty ? uri.path : '';
+    final fullPath = '$host$path';
+
+    if (fullPath.isNotEmpty) {
+      _router.go(fullPath);
+    }
+    return;
+  }
+
+  if (uri.hasAuthority || deeplink.startsWith('/')) {
+    _router.go(uri.path.isEmpty ? '/' : uri.toString());
   }
 }
 
@@ -353,6 +394,7 @@ class MyApp extends StatelessWidget {
       animation: themeController,
       builder: (context, _) {
         return MaterialApp.router(
+          scaffoldMessengerKey: _rootScaffoldMessengerKey,
           routerConfig: _router,
           debugShowCheckedModeBanner: false,
           title: 'SII Admisión',
